@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>الكاشير</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#F4F1EC;--card:#fff;--ink:#2A2018;--muted:#8a7d6f;
+    --primary:#6F4E37;--btn:#6F4E37;--line:#e7e0d6;--ok:#2f7d4f}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:Tajawal,system-ui,sans-serif;background:var(--bg);color:var(--ink);
+    min-height:100dvh}
+  .wrap{max-width:520px;margin:0 auto;padding:20px 18px 40px}
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .head h1{font-size:19px;margin:0;font-weight:800}
+  .head .out{font-size:13px;color:var(--muted);background:none;border:0;cursor:pointer;font-family:inherit}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;
+    box-shadow:0 8px 24px -18px rgba(0,0,0,.3)}
+  label{display:block;font-size:13.5px;font-weight:700;margin:14px 0 6px;color:var(--muted)}
+  input,select{width:100%;font-family:inherit;font-size:16px;padding:13px 14px;
+    border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink)}
+  input:focus,select:focus{outline:2px solid var(--primary);border-color:transparent}
+  .btn{appearance:none;border:0;border-radius:12px;padding:15px;width:100%;
+    font-family:inherit;font-weight:800;font-size:16px;cursor:pointer;background:var(--btn);
+    color:#fff;margin-top:18px;transition:.15s}
+  .btn:active{transform:scale(.99)} .btn:disabled{opacity:.5}
+  .btn.alt{background:#25D366} /* واتساب */
+  .btn.ghost{background:#fff;color:var(--primary);border:1.5px solid var(--primary)}
+  .cups-input{display:flex;gap:8px;align-items:center}
+  .cups-input button{width:52px;height:52px;border-radius:12px;border:1px solid var(--line);
+    background:#fff;font-size:24px;font-weight:800;cursor:pointer;color:var(--primary)}
+  .cups-input input{text-align:center;font-size:22px;font-weight:800}
+  .result{margin-top:16px;padding:16px;border-radius:14px;background:#f0f6f1;
+    border:1px solid #cfe6d6;display:none}
+  .result.show{display:block}
+  .result .big{font-size:17px;font-weight:800;color:var(--ok)}
+  .result .sub{font-size:14px;color:var(--muted);margin-top:6px}
+  .found{font-size:14px;color:var(--ok);font-weight:700;margin-top:8px;min-height:20px}
+  .reward-chip{display:inline-flex;align-items:center;gap:8px;background:#fff5e6;
+    border:1px solid #f0d9a8;border-radius:12px;padding:10px 14px;margin-top:10px;
+    font-size:14px;font-weight:700;width:100%;justify-content:space-between}
+  .reward-chip button{background:var(--primary);color:#fff;border:0;border-radius:8px;
+    padding:8px 12px;font-family:inherit;font-weight:700;cursor:pointer}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(140%);
+    background:#111;color:#fff;padding:12px 18px;border-radius:12px;font-size:14px;
+    transition:.3s;z-index:99}.toast.show{transform:translateX(-50%) translateY(0)}.toast.err{background:#8c2f2f}
+  .login{max-width:360px;margin:60px auto 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- تسجيل الدخول -->
+  <div id="loginView" class="login" style="display:none">
+    <div class="card">
+      <h1 style="margin:0 0 4px">دخول الموظف</h1>
+      <p style="color:var(--muted);font-size:14px;margin:0">سجّل بالبريد ورمز المرور</p>
+      <label>البريد الإلكتروني</label>
+      <input id="email" type="email" autocomplete="username" />
+      <label>رمز المرور</label>
+      <input id="pass" type="password" autocomplete="current-password" />
+      <button class="btn" id="loginBtn">تسجيل الدخول</button>
+    </div>
+  </div>
+
+  <!-- شاشة العمل -->
+  <div id="workView" style="display:none">
+    <div class="head">
+      <h1>إضافة أكواب</h1>
+      <button class="out" id="logoutBtn">خروج</button>
+    </div>
+    <div class="card">
+      <label>رقم جوال العميل</label>
+      <input id="phone" type="tel" inputmode="numeric" placeholder="05xxxxxxxx" />
+      <div class="found" id="found"></div>
+
+      <label>اسم العميل (اختياري — لأول مرة)</label>
+      <input id="cname" type="text" placeholder="اسم العميل" />
+
+      <label>عدد الأكواب</label>
+      <div class="cups-input">
+        <button id="minus" type="button">−</button>
+        <input id="cups" type="number" value="1" min="1" />
+        <button id="plus" type="button">+</button>
+      </div>
+
+      <label>الفرع</label>
+      <select id="branch"><option value="">— بدون تحديد —</option></select>
+
+      <label>ملاحظة (اختياري)</label>
+      <input id="note" type="text" placeholder="" />
+
+      <button class="btn" id="submitBtn">اعتماد العملية</button>
+
+      <div class="result" id="result"></div>
+
+      <button class="btn alt" id="waBtn" style="display:none">
+        📲 إرسال رابط العميل عبر واتساب</button>
+
+      <div id="rewardBox"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { sb, callFn, toast, applyBrand } from "./app.js";
+
+const $ = s => document.querySelector(s);
+let cafeId = null, currentCustomer = null;
+
+// جلسة
+const { data: sess } = await sb.auth.getSession();
+if (sess?.session) initWork(); else showLogin();
+
+function showLogin(){ $("#loginView").style.display="block"; $("#workView").style.display="none"; }
+
+$("#loginBtn").onclick = async () => {
+  const email=$("#email").value.trim(), password=$("#pass").value;
+  if(!email||!password) return toast("أدخل البريد ورمز المرور", true);
+  $("#loginBtn").disabled=true;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  $("#loginBtn").disabled=false;
+  if(error) return toast("بيانات الدخول غير صحيحة", true);
+  initWork();
+};
+$("#logoutBtn").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+async function initWork(){
+  $("#loginView").style.display="none"; $("#workView").style.display="block";
+  // الكافيه المرتبط بالموظف
+  const { data: u } = await sb.auth.getUser();
+  const { data: staff } = await sb.from("staff")
+    .select("cafe_id").eq("user_id", u.user.id).eq("is_active",true).limit(1).maybeSingle();
+  if(!staff){ toast("حسابك غير مرتبط بكافيه", true); return; }
+  cafeId = staff.cafe_id;
+  // هوية الكافيه (الألوان) — تطبّق على واجهة الكاشير
+  const { data: cafe } = await sb.from("cafes")
+    .select("color_primary,color_secondary,color_button").eq("id",cafeId).maybeSingle();
+  applyBrand(cafe);
+  // الفروع
+  const { data: branches } = await sb.from("branches")
+    .select("id,name").eq("cafe_id",cafeId).eq("is_active",true);
+  const sel=$("#branch");
+  (branches||[]).forEach(b=>{const o=document.createElement("option");o.value=b.id;o.textContent=b.name;sel.appendChild(o);});
+}
+
+// بحث عن العميل عند كتابة الرقم (بعد توقف الكتابة)
+let t;
+$("#phone").oninput = () => { clearTimeout(t); currentCustomer=null; $("#found").textContent="";
+  $("#waBtn").style.display="none"; $("#result").classList.remove("show");
+  $("#rewardBox").innerHTML=""; t=setTimeout(lookup, 500); };
+
+// بحث فقط عبر السيرفر (تطبيع موحّد، بدون إنشاء).
+async function lookup(){
+  const phone=$("#phone").value.trim();
+  const digits=phone.replace(/\D/g,"");
+  if(digits.length < 9) return;
+  try{
+    const r = await callFn("customer-upsert",
+      { cafe_id:cafeId, phone, search_only:true }, true);
+    if(r.found){
+      currentCustomer = { customer_id:r.customer_id, full_name:r.full_name, existing:true };
+      if(r.full_name) $("#cname").value = r.full_name;
+      $("#found").textContent = `✓ عميل مسجّل: ${r.full_name||"—"}`;
+      renderRewards(r.rewards||[]);
+    }else{
+      currentCustomer = null;
+      $("#rewardBox").innerHTML="";
+      $("#found").textContent = "عميل جديد — اكتب الاسم (اختياري) ثم اعتمد العملية";
+    }
+  }catch(e){ /* صامت أثناء الكتابة */ }
+}
+
+$("#waBtn").onclick = () => {
+  const link=$("#waBtn").dataset.link; if(link) window.open(link,"_blank");
+};
+
+// عداد الأكواب
+$("#minus").onclick=()=>{const c=$("#cups");c.value=Math.max(1,(+c.value||1)-1);};
+$("#plus").onclick =()=>{const c=$("#cups");c.value=(+c.value||1)+1;};
+
+// اعتماد العملية
+$("#submitBtn").onclick = async () => {
+  const phone=$("#phone").value.trim();
+  if(phone.replace(/\D/g,"").length < 9) return toast("أدخل رقم جوال صحيح", true);
+  const cups=+$("#cups").value||1;
+  $("#submitBtn").disabled=true;
+  try{
+    // 1) تأكد من وجود العميل (يُنشأ الآن إن كان جديدًا) ويرجّع رابط صفحته
+    const up = await callFn("customer-upsert",
+      { cafe_id:cafeId, phone, full_name:$("#cname").value.trim()||null }, true);
+    currentCustomer = up;
+
+    // 2) سجّل الزيارة وأضف الأكواب
+    const res = await sb.rpc("add_visit",{
+      p_customer: up.customer_id, p_cups: cups,
+      p_branch: $("#branch").value||null, p_note: $("#note").value.trim()||null });
+    if(res.error) throw res.error;
+    const d = res.data;
+
+    const box=$("#result");
+    box.innerHTML = `<div class="big">تمت إضافة ${cups} ${cups==1?"كوب":"أكواب"} ✓</div>
+      <div class="sub">الرصيد الحالي: ${d.balance} من ${d.cups_per_reward}</div>
+      ${d.free_cups_earned>0?`<div class="sub">🎉 استحق ${d.free_cups_earned} كوب مجاني!</div>`:""}
+      <div class="sub">العميل مؤهل للعب الروليت من صفحته</div>`;
+    box.classList.add("show");
+
+    // 3) زر إرسال رابط العميل عبر واتساب ويب (يظهر دائمًا بعد الاعتماد)
+    const waBtn=$("#waBtn");
+    waBtn.dataset.link = up.wa_link || "";
+    waBtn.style.display = "block";
+    waBtn.textContent = "📲 إرسال رابط العميل عبر واتساب";
+    if(!up.wa_link) waBtn.style.display="none";  // لو غاب الرابط لأي سبب
+
+    toast("تم الاعتماد");
+    loadRewards(up.customer_id);
+    $("#found").textContent = `✓ ${up.full_name||"العميل"}`;
+    $("#note").value="";
+  }catch(e){
+    const m = String(e.message||e);
+    toast(m.includes("DAILY_LIMIT")?"تجاوز الحد اليومي":"تعذّر الاعتماد", true);
+  }finally{ $("#submitBtn").disabled=false; }
+};
+
+// عرض قائمة مكافآت (تُستدعى من البحث أو بعد الاعتماد)
+function renderRewards(rewards){
+  const box=$("#rewardBox"); box.innerHTML="";
+  (rewards||[]).forEach(r=>{
+    const d=document.createElement("div"); d.className="reward-chip";
+    d.innerHTML=`<span>🎁 ${r.label}</span><button>استخدام</button>`;
+    d.querySelector("button").onclick=async()=>{
+      try{ const res=await sb.rpc("redeem_reward",{p_reward:r.id});
+        if(res.error) throw res.error; toast("تم استخدام المكافأة"); d.remove(); }
+      catch(e){ toast("تعذّر الاستخدام", true); }
+    };
+    box.appendChild(d);
+  });
+}
+
+// جلب المكافآت من القاعدة ثم عرضها (بعد اعتماد العملية)
+async function loadRewards(customerId){
+  const { data: rewards } = await sb.from("rewards")
+    .select("id,label").eq("customer_id",customerId).eq("status","available");
+  renderRewards(rewards||[]);
+}
+</script>
+</body>
+</html>
