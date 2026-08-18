@@ -1,0 +1,13 @@
+project_id = "ghuiotbjwefwwguvzphe"
+
+[functions.customer-me]
+verify_jwt = false
+
+[functions.customer-upsert]
+verify_jwt = false
+
+[functions.spin]
+verify_jwt = false
+
+[functions.verify-code]
+verify_jwt = false

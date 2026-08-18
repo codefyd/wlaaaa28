@@ -1,7 +1,7 @@
 // =============================================================
 // app.js — أدوات مشتركة لكل الصفحات
 // =============================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.111.0";
 import { APP_CONFIG } from "./config.js";
 
 const cfg = APP_CONFIG;
@@ -15,16 +15,38 @@ export async function callFn(name, body, withAuth = false) {
   };
   if (withAuth) {
     const { data } = await sb.auth.getSession();
-    if (data?.session) headers["Authorization"] = `Bearer ${data.session.access_token}`;
-  } else {
-    headers["Authorization"] = `Bearer ${cfg.SUPABASE_ANON_KEY}`;
+    if (!data?.session) throw new Error("UNAUTHENTICATED");
+    headers["Authorization"] = `Bearer ${data.session.access_token}`;
   }
-  const res = await fetch(`${cfg.FUNCTIONS_URL}/${name}`, {
-    method: "POST", headers, body: JSON.stringify(body || {}),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let res;
+  try {
+    res = await fetch(`${cfg.FUNCTIONS_URL}/${name}`, {
+      method: "POST", headers, body: JSON.stringify(body || {}),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error || `HTTP_${res.status}`);
   return json;
+}
+
+export function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
+  })[ch]);
+}
+
+export function safeHttpUrl(value) {
+  try {
+    const url = new URL(String(value ?? ""), location.href);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch {
+    return "";
+  }
 }
 
 // قراءة قيمة من هاش الرابط: #t=xxxx

@@ -70,6 +70,7 @@
       <label>البريد</label><input id="email" type="email"/>
       <label>رمز المرور</label><input id="pass" type="password"/>
       <button class="btn" id="loginBtn" style="width:100%;margin-top:14px">دخول</button>
+      <a href="./reset-password.html" style="display:block;text-align:center;margin-top:14px;color:var(--primary)">نسيت كلمة المرور؟</a>
     </div>
   </div>
 
@@ -188,7 +189,7 @@
           <div><label>صلاحية المكافآت (أيام)</label><input type="number" id="f_valid" min="1"></div>
           <div><label>الكوب المجاني يحتاج اعتماد موظف</label>
             <select id="f_approval"><option value="true">نعم</option><option value="false">لا</option></select></div>
-          <div><label>فرض تحقق واتساب قبل التسجيل (مستقبلي)</label>
+          <div><label>فرض تحقق واتساب قبل التسجيل</label>
             <select id="f_reqverify"><option value="false">لا</option><option value="true">نعم</option></select></div>
         </div>
         <button class="btn" id="saveLoyalty" style="margin-top:16px">حفظ إعدادات الولاء</button>
@@ -212,9 +213,14 @@
 </div>
 
 <script type="module">
-import { sb, toast, applyBrand } from "./app.js";
+import { sb, toast, applyBrand, escapeHTML } from "./app.js";
 const $ = s=>document.querySelector(s);
 let cafeId=null, cafe=null, prizes=[];
+function riyadhDate(date=new Date()){
+  const parts=new Intl.DateTimeFormat("en",{timeZone:"Asia/Riyadh",year:"numeric",month:"2-digit",day:"2-digit"})
+    .formatToParts(date).reduce((o,p)=>(o[p.type]=p.value,o),{});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 
 const { data: sess } = await sb.auth.getSession();
 if(sess?.session) init(); else $("#loginView").style.display="block";
@@ -244,8 +250,8 @@ async function init(){
   fillIdentity(); fillLoyalty(); await loadPrizes();
   // فترة افتراضية: آخر 30 يوم
   const to=new Date(), from=new Date(Date.now()-30*864e5);
-  $("#rTo").value=to.toISOString().slice(0,10);
-  $("#rFrom").value=from.toISOString().slice(0,10);
+  $("#rTo").value=riyadhDate(to);
+  $("#rFrom").value=riyadhDate(from);
   runReport();
 }
 
@@ -296,14 +302,14 @@ function renderPrizes(){
   const totalW=prizes.reduce((s,p)=>s+(+p.weight||0),0)||1;
   $("#prizeList").innerHTML=prizes.map((p,i)=>`
     <div class="prize-row">
-      <input data-i="${i}" data-f="label" value="${p.label||""}" placeholder="اسم الجائزة">
+      <input data-i="${i}" data-f="label" value="${escapeHTML(p.label||"")}" placeholder="اسم الجائزة">
       <select data-i="${i}" data-f="prize_type">
         ${["discount:خصم","size_upgrade:ترقية حجم","free_addon:إضافة مجانية",
            "free_cup:كوب مجاني","points:نقاط","none:حظ أوفر"].map(o=>{
           const [v,t]=o.split(":");return `<option value="${v}" ${p.prize_type===v?"selected":""}>${t}</option>`}).join("")}
       </select>
-      <input data-i="${i}" data-f="weight" type="number" min="0" value="${p.weight}" placeholder="الوزن">
-      <input data-i="${i}" data-f="color" type="color" value="${p.color||'#C8A97E'}">
+      <input data-i="${i}" data-f="weight" type="number" min="0" value="${Math.max(0,+p.weight||0)}" placeholder="الوزن">
+      <input data-i="${i}" data-f="color" type="color" value="${/^#[0-9a-f]{6}$/i.test(p.color||"")?p.color:'#C8A97E'}">
       <button class="btn del sm" data-del="${i}">حذف</button>
       <div class="pct">${((+p.weight||0)/totalW*100).toFixed(1)}%</div>
     </div>`).join("") || `<p style="color:var(--muted)">لا خانات بعد.</p>`;
@@ -320,12 +326,10 @@ function renderPrizes(){
 $("#addPrize").onclick=()=>{prizes.push({label:"جائزة",prize_type:"discount",prize_value:null,
   weight:1,color:"#C8A97E",sort_order:prizes.length,is_active:true});renderPrizes();};
 $("#savePrizes").onclick=async()=>{
-  // احذف الكل وأعد الإدراج (أبسط لعدد صغير من الخانات)
-  await sb.from("roulette_prizes").delete().eq("cafe_id",cafeId);
-  const rows=prizes.map((p,i)=>({cafe_id:cafeId,label:p.label,prize_type:p.prize_type,
-    prize_value:p.prize_value??null,weight:+p.weight||0,color:p.color,sort_order:i,is_active:true}));
-  if(rows.length){const { error }=await sb.from("roulette_prizes").insert(rows);
-    if(error) return toast("تعذّر الحفظ",true);}
+  const rows=prizes.map(p=>({label:p.label,prize_type:p.prize_type,
+    prize_value:p.prize_value??null,weight:+p.weight||0,color:p.color}));
+  const { error }=await sb.rpc("replace_roulette_prizes",{p_cafe:cafeId,p_prizes:rows});
+  if(error) return toast("تعذّر الحفظ",true);
   toast("تم حفظ الروليت"); loadPrizes();
 };
 
@@ -333,8 +337,8 @@ $("#savePrizes").onclick=async()=>{
 $("#runReport").onclick=runReport;
 let lastReport=null;
 async function runReport(){
-  const from=new Date($("#rFrom").value+"T00:00:00");
-  const to=new Date($("#rTo").value+"T23:59:59");
+  const from=new Date($("#rFrom").value+"T00:00:00+03:00");
+  const to=new Date($("#rTo").value+"T23:59:59.999+03:00");
   const { data,error }=await sb.rpc("report_overview",
     {p_cafe:cafeId,p_from:from.toISOString(),p_to:to.toISOString()});
   if(error) return toast("تعذّر جلب التقرير",true);
@@ -344,11 +348,10 @@ async function runReport(){
 /* نطاقات سريعة */
 document.querySelectorAll("#quickRanges .chip").forEach(b=>b.onclick=()=>{
   const to=new Date();
-  let from;
-  if(b.dataset.month){ from=new Date(to.getFullYear(),to.getMonth(),1); }
-  else { from=new Date(Date.now()-(+b.dataset.days)*864e5); }
-  $("#rTo").value=to.toISOString().slice(0,10);
-  $("#rFrom").value=from.toISOString().slice(0,10);
+  const from=b.dataset.month?`${riyadhDate(to).slice(0,7)}-01`
+    :riyadhDate(new Date(Date.now()-(+b.dataset.days)*864e5));
+  $("#rTo").value=riyadhDate(to);
+  $("#rFrom").value=from;
   runReport();
 });
 
@@ -429,8 +432,8 @@ async function loadCustomers(){
     return;
   }
   body.innerHTML=lastCustomers.map(c=>`<tr>
-    <td>${c.full_name||"—"}</td>
-    <td>${c.phone}</td>
+    <td>${escapeHTML(c.full_name||"—")}</td>
+    <td>${escapeHTML(c.phone)}</td>
     <td>${c.balance}</td>
     <td>${c.visits_count}</td>
     <td>${c.cups_total}</td>
@@ -459,7 +462,7 @@ $("#exportCustomers").onclick=()=>{
 const WD=["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 function bars(items,labelKey,valKey,mapLabel){
   const max=Math.max(1,...items.map(x=>x[valKey]));
-  return items.map(x=>`<div class="bar-row"><div class="lbl">${mapLabel?mapLabel(x[labelKey]):x[labelKey]}</div>
+  return items.map(x=>`<div class="bar-row"><div class="lbl">${escapeHTML(mapLabel?mapLabel(x[labelKey]):x[labelKey])}</div>
     <div class="bar"><span style="width:${x[valKey]/max*100}%"></span></div>
     <div class="v">${x[valKey]}</div></div>`).join("")||`<p style="color:var(--muted)">لا بيانات</p>`;
 }
@@ -489,14 +492,14 @@ function renderReport(d){
 
     <div class="card"><h3>أكثر العملاء ولاءً</h3>
       <table><thead><tr><th>العميل</th><th>الجوال</th><th>الزيارات</th><th>الأكواب</th></tr></thead>
-      <tbody>${(d.top_customers||[]).map(c=>`<tr><td>${c.full_name||"—"}</td>
-        <td>${c.phone}</td><td>${c.visits}</td><td>${c.cups}</td></tr>`).join("")
+      <tbody>${(d.top_customers||[]).map(c=>`<tr><td>${escapeHTML(c.full_name||"—")}</td>
+        <td>${escapeHTML(c.phone)}</td><td>${c.visits}</td><td>${c.cups}</td></tr>`).join("")
         ||`<tr><td colspan=4 style="color:var(--muted)">لا بيانات</td></tr>`}</tbody></table></div>
 
     <div class="card"><h3>العملاء المنقطعون (+21 يوم)</h3>
       <table><thead><tr><th>العميل</th><th>الجوال</th><th>آخر زيارة</th></tr></thead>
-      <tbody>${(d.lapsed_customers||[]).map(c=>`<tr><td>${c.full_name||"—"}</td>
-        <td>${c.phone}</td><td>${new Date(c.last_visit_at).toLocaleDateString("ar-SA")}</td></tr>`).join("")
+      <tbody>${(d.lapsed_customers||[]).map(c=>`<tr><td>${escapeHTML(c.full_name||"—")}</td>
+        <td>${escapeHTML(c.phone)}</td><td>${new Date(c.last_visit_at).toLocaleDateString("ar-SA")}</td></tr>`).join("")
         ||`<tr><td colspan=3 style="color:var(--muted)">لا يوجد</td></tr>`}</tbody></table></div>
 
     <div class="card"><h3>الجوائز الأكثر استخدامًا</h3>${bars(d.top_rewards,"label","used")}</div>

@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<script>
+  // روابط الاستعادة الافتراضية تصل إلى Site URL؛ انقل الجلسة فورًا إلى صفحة تغيير كلمة المرور.
+  const authParams=new URLSearchParams(location.hash.slice(1));
+  if(authParams.get("type")==="recovery" || authParams.has("access_token"))
+    location.replace(`./reset-password.html${location.hash}`);
+</script>
 <title>محفظة الولاء</title>
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="theme-color" content="#241812" />
@@ -405,6 +411,10 @@
     box-shadow:0 14px 30px var(--shadow)}
   .toast.show{transform:translateX(-50%) translateY(0)}
   .toast.err{border-color:#b04545;color:#c96a6a}
+  .verify-card{max-width:460px;margin:12vh auto 0;text-align:center}
+  .verify-code{width:100%;margin:18px 0 4px;padding:14px;border-radius:14px;
+    border:1px solid var(--line-hi);background:var(--field);color:var(--ink);
+    font:700 24px var(--font);text-align:center;letter-spacing:.35em;direction:ltr}
 
   @media (prefers-reduced-motion:reduce){
     .member-card::after,.btn::after,.track span::after,.mc-seal svg,
@@ -431,7 +441,17 @@
     </div>
   </div>
 
-  <main class="wrap"><div id="content" style="display:none"></div></main>
+  <main class="wrap">
+    <section id="verifyView" class="card verify-card" style="display:none">
+      <p class="eyebrow">تأكيد رقم الجوال</p>
+      <h1>أدخل رمز التحقق</h1>
+      <p class="muted">أرسل الكافيه رمزًا من 6 أرقام مع رابط بطاقتك.</p>
+      <input id="verifyCode" class="verify-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" aria-label="رمز التحقق">
+      <button class="btn" id="verifyBtn">تأكيد الرقم</button>
+      <p id="verifyMessage" class="muted" aria-live="polite"></p>
+    </section>
+    <div id="content" style="display:none"></div>
+  </main>
 
   <!-- ستارة الجائزة -->
   <div class="prize-overlay" id="prizeOverlay">
@@ -453,9 +473,15 @@
   </div>
 
 <script type="module">
-import { callFn, hashParam, applyTheme, toast } from "./app.js";
+import { callFn, hashParam, applyTheme, toast, escapeHTML, safeHttpUrl } from "./app.js";
 
-const token = hashParam("t");
+const rawHash = decodeURIComponent(location.hash.slice(1)).trim();
+const codeCandidate = (/^[A-HJ-NP-Z2-9]{8}$/i.test(rawHash) ? rawHash : hashParam("c")) || "";
+const customerCode = /^[A-HJ-NP-Z2-9]{8}$/i.test(codeCandidate) ? codeCandidate.toUpperCase() : null;
+const legacyToken = hashParam("t");
+const customerAccess = customerCode
+  ? { customer_code: customerCode }
+  : legacyToken ? { magic_token: legacyToken } : null;
 const $ = (s)=>document.querySelector(s);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let state=null, wheelLabelsArr=[], currentRotation=0, spinning=false;
@@ -493,24 +519,28 @@ function applyBrandTheme(cafe){
 }
 
 /* ================= شاشة الافتتاح: شعار الكافيه فورًا (مع تخزين محلي) ================= */
-const brandKey = token ? "brand:"+token : null;
+const brandKey = customerAccess ? "brand:"+(customerCode||legacyToken) : null;
 function paintBoot(name,logo){
   if(name) $("#bootName").textContent=name;
-  if(logo) $("#bootLogo").innerHTML=`<img src="${logo}" alt="">`;
+  const logoUrl=safeHttpUrl(logo);
+  if(logoUrl){
+    const img=document.createElement("img"); img.src=logoUrl; img.alt="";
+    $("#bootLogo").replaceChildren(img);
+  }
 }
 try{
   const cached = brandKey && JSON.parse(localStorage.getItem(brandKey)||"null");
   if(cached){ applyBrandTheme(cached); paintBoot(cached.name, cached.logo_url); }
 }catch(e){}
 
-if(!token){
+if(!customerAccess){
   $("#bootStatus").textContent="الرابط غير صالح — اطلب رابطك من الكافيه.";
   $("#bootBar").style.display="none";
 }else load();
 
 async function load(){
   try{
-    state = await callFn("customer-me", { magic_token: token });
+    state = await callFn("customer-me", customerAccess);
     const cafe=state.cafe||{};
     applyBrandTheme(cafe);
     paintBoot(cafe.name, cafe.logo_url);
@@ -519,7 +549,8 @@ async function load(){
       color_primary:cafe.color_primary, color_secondary:cafe.color_secondary,
       color_background:cafe.color_background, color_button:cafe.color_button
     })); }catch(e){}
-    render();
+    if(state.requires_verification) showVerification();
+    else render();
     /* لحظة الهوية: لا نخفي الشعار قبل اكتمالها */
     const wait=Math.max(0, 1200-(performance.now()-bootT0));
     setTimeout(()=>{
@@ -532,11 +563,37 @@ async function load(){
   }
 }
 
+function showVerification(){
+  $("#content").style.display="none";
+  $("#verifyView").style.display="block";
+}
+
+$("#verifyBtn").onclick=async()=>{
+  const code=$("#verifyCode").value.replace(/\D/g,"");
+  const message=$("#verifyMessage");
+  if(code.length!==6){ message.textContent="أدخل الرمز المكوّن من 6 أرقام."; return; }
+  $("#verifyBtn").disabled=true; message.textContent="جارٍ التحقق…";
+  try{
+    await callFn("verify-code",{...customerAccess,code});
+    state=await callFn("customer-me",customerAccess);
+    if(state.requires_verification) throw new Error("VERIFY_FAILED");
+    $("#verifyView").style.display="none";
+    message.textContent="";
+    render();
+    toast("تم تأكيد رقمك");
+  }catch(e){
+    message.textContent=e.message==="TOO_MANY_ATTEMPTS"
+      ?"محاولات كثيرة — حاول بعد 15 دقيقة."
+      :e.message==="CODE_EXPIRED"?"انتهت صلاحية الرمز — اطلب رابطًا جديدًا من الكافيه."
+      :"الرمز غير صحيح.";
+  }finally{$("#verifyBtn").disabled=false;}
+};
+
 function fmtDate(s){return new Date(s).toLocaleDateString("ar-SA");}
 function fmtDateTime(s){return new Date(s).toLocaleString("ar-SA",{dateStyle:"medium",timeStyle:"short"});}
 
 function sealSVG(name){
-  const txt=`${name||"كافيه"} • بطاقة الولاء • `;
+  const txt=escapeHTML(`${name||"كافيه"} • بطاقة الولاء • `);
   return `<svg viewBox="0 0 100 100">
     <defs><path id="cir" d="M50,50 m-38,0 a38,38 0 1,1 76,0 a38,38 0 1,1 -76,0"/></defs>
     <circle cx="50" cy="50" r="47" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
@@ -552,14 +609,15 @@ function render(){
   const remain=Math.max(0,need-bal);
   const percent=Math.min(100,Math.round((bal/need)*100));
   const canSpin=!!c.pending_spin_visit_id;
-  const logo=cafe.logo_url?`<img src="${cafe.logo_url}" alt="">`:"☕";
+  const logoUrl=safeHttpUrl(cafe.logo_url);
+  const logo=logoUrl?`<img src="${escapeHTML(logoUrl)}" alt="">`:"☕";
 
   const stamps=Array.from({length:need},(_,i)=>
     `<div class="stamp ${i<bal?"on":""}" style="animation-delay:${.5+i*.06}s">☕</div>`).join("");
 
   const rewards=(c.rewards||[]).map(r=>`
     <div class="row">
-      <div><div class="t">🎁 ${r.label}</div>
+      <div><div class="t">🎁 ${escapeHTML(r.label)}</div>
         <div class="m">${r.expires_at?"تنتهي "+fmtDate(r.expires_at):"سارية بدون انتهاء"}</div></div>
       <span class="pill ok">جاهزة للاستلام</span>
     </div>`).join("") || `<div class="empty">مكافآتك ستظهر هنا —<br>كل زيارة تقرّبك خطوة ☕</div>`;
@@ -578,7 +636,7 @@ function render(){
           <div class="mc-brand">
             <div class="mc-logo">${logo}</div>
             <div style="min-width:0">
-              <p class="mc-name">${cafe.name||"كافيه"}</p>
+              <p class="mc-name">${escapeHTML(cafe.name||"كافيه")}</p>
               <p class="mc-tag">LOYALTY MEMBER</p>
             </div>
           </div>
@@ -586,7 +644,7 @@ function render(){
         </div>
         <div class="mc-body">
           <p class="mc-hello">بطاقة عضوية باسم</p>
-          <h1 class="mc-member">${c.customer.full_name||"عميلنا العزيز"}</h1>
+          <h1 class="mc-member">${escapeHTML(c.customer.full_name||"عميلنا العزيز")}</h1>
         </div>
         <div class="mc-foot">
           <div class="mc-chip"></div>
@@ -838,7 +896,7 @@ function startSpin(v0DegPerSec){
   }
 
   let res=null, err=null;
-  callFn("spin",{ magic_token:token, visit_id:state.pending_spin_visit_id })
+  callFn("spin",{ ...customerAccess, visit_id:state.pending_spin_visit_id })
     .then(r=>{res=r;}).catch(e=>{err=e;})
     .finally(()=>{ resolved=true; if(reduced) land(); });
 
@@ -923,7 +981,7 @@ $("#prizeClose").onclick=async()=>{
   $("#prizeOverlay").classList.remove("show");
   spinning=false;
   try{
-    state=await callFn("customer-me",{ magic_token:token });
+    state=await callFn("customer-me",customerAccess);
     render();
   }catch(e){}
 };

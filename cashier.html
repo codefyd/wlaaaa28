@@ -60,6 +60,7 @@
       <label>رمز المرور</label>
       <input id="pass" type="password" autocomplete="current-password" />
       <button class="btn" id="loginBtn">تسجيل الدخول</button>
+      <a href="./reset-password.html" style="display:block;text-align:center;margin-top:14px;color:var(--primary)">نسيت كلمة المرور؟</a>
     </div>
   </div>
 
@@ -80,7 +81,7 @@
       <label>عدد الأكواب</label>
       <div class="cups-input">
         <button id="minus" type="button">−</button>
-        <input id="cups" type="number" value="1" min="1" />
+        <input id="cups" type="number" value="1" min="1" max="100" />
         <button id="plus" type="button">+</button>
       </div>
 
@@ -177,18 +178,31 @@ $("#waBtn").onclick = () => {
 
 // عداد الأكواب
 $("#minus").onclick=()=>{const c=$("#cups");c.value=Math.max(1,(+c.value||1)-1);};
-$("#plus").onclick =()=>{const c=$("#cups");c.value=(+c.value||1)+1;};
+$("#plus").onclick =()=>{const c=$("#cups");c.value=Math.min(100,(+c.value||1)+1);};
+
+$("#waBtn").onclick=()=>{
+  const link=$("#waBtn").dataset.link;
+  if(link) window.open(link,"_blank","noopener");
+};
 
 // اعتماد العملية
 $("#submitBtn").onclick = async () => {
   const phone=$("#phone").value.trim();
   if(phone.replace(/\D/g,"").length < 9) return toast("أدخل رقم جوال صحيح", true);
-  const cups=+$("#cups").value||1;
+  const cups=Math.min(100,Math.max(1,+$("#cups").value||1));
+  // فتح نافذة فارغة من نقرة الموظف مباشرة يمنع المتصفح من حظر واتساب بعد انتظار الشبكة.
+  const whatsappWindow=window.open("","_blank");
+  if(whatsappWindow){
+    whatsappWindow.opener=null;
+    whatsappWindow.document.title="جارٍ تجهيز رسالة واتساب…";
+    whatsappWindow.document.body.textContent="جارٍ تسجيل العملية وتجهيز رسالة العميل…";
+  }
   $("#submitBtn").disabled=true;
   try{
     // 1) تأكد من وجود العميل (يُنشأ الآن إن كان جديدًا) ويرجّع رابط صفحته
     const up = await callFn("customer-upsert",
-      { cafe_id:cafeId, phone, full_name:$("#cname").value.trim()||null }, true);
+      { cafe_id:cafeId, phone, full_name:$("#cname").value.trim()||null,
+        client_base_url:new URL(".",location.href).href }, true);
     currentCustomer = up;
 
     // 2) سجّل الزيارة وأضف الأكواب
@@ -209,14 +223,19 @@ $("#submitBtn").onclick = async () => {
     const waBtn=$("#waBtn");
     waBtn.dataset.link = up.wa_link || "";
     waBtn.style.display = "block";
-    waBtn.textContent = "📲 إرسال رابط العميل عبر واتساب";
+    waBtn.textContent = "📲 فتح واتساب مرة أخرى";
     if(!up.wa_link) waBtn.style.display="none";  // لو غاب الرابط لأي سبب
+
+    if(up.wa_link && whatsappWindow) whatsappWindow.location.replace(up.wa_link);
+    else if(whatsappWindow) whatsappWindow.close();
+    else if(up.wa_link) toast("المتصفح منع فتح واتساب — اضغط زر واتساب",true);
 
     toast("تم الاعتماد");
     loadRewards(up.customer_id);
     $("#found").textContent = `✓ ${up.full_name||"العميل"}`;
     $("#note").value="";
   }catch(e){
+    if(whatsappWindow) whatsappWindow.close();
     const m = String(e.message||e);
     toast(m.includes("DAILY_LIMIT")?"تجاوز الحد اليومي":"تعذّر الاعتماد", true);
   }finally{ $("#submitBtn").disabled=false; }
@@ -227,10 +246,16 @@ function renderRewards(rewards){
   const box=$("#rewardBox"); box.innerHTML="";
   (rewards||[]).forEach(r=>{
     const d=document.createElement("div"); d.className="reward-chip";
-    d.innerHTML=`<span>🎁 ${r.label}</span><button>استخدام</button>`;
-    d.querySelector("button").onclick=async()=>{
+    const label=document.createElement("span");
+    label.textContent=`🎁 ${r.label||"مكافأة"}`;
+    const use=document.createElement("button"); use.type="button"; use.textContent="استخدام";
+    d.append(label,use);
+    use.onclick=async()=>{
       try{ const res=await sb.rpc("redeem_reward",{p_reward:r.id});
-        if(res.error) throw res.error; toast("تم استخدام المكافأة"); d.remove(); }
+        if(res.error) throw res.error;
+        if(res.data?.status==="expired") toast("انتهت صلاحية المكافأة",true);
+        else toast("تم استخدام المكافأة");
+        d.remove(); }
       catch(e){ toast("تعذّر الاستخدام", true); }
     };
     box.appendChild(d);

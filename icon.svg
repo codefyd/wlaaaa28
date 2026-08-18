@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="محفظة الولاء">
+  <rect width="512" height="512" rx="112" fill="#241812"/>
+  <circle cx="256" cy="256" r="168" fill="#6f4e37" stroke="#c8a97e" stroke-width="18"/>
+  <path d="M166 210h179v67a90 90 0 0 1-90 90 89 89 0 0 1-89-90v-67Z" fill="#fff4df"/>
+  <path d="M345 232h25a47 47 0 0 1 0 94h-37" fill="none" stroke="#fff4df" stroke-width="25" stroke-linecap="round"/>
+  <path d="M220 174c-21-29 27-38 2-70M276 174c-21-29 27-38 2-70" fill="none" stroke="#c8a97e" stroke-width="15" stroke-linecap="round"/>
+</svg>
