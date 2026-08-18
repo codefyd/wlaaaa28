@@ -14,7 +14,7 @@
 <meta name="theme-color" content="#241812" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700&family=Cairo:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Kufi+Arabic:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
   /* ================================================================
      الخط: foda.ttf — ضع الملف الأصلي بجانب هذه الصفحة وسيُستخدم تلقائيًا
@@ -91,7 +91,8 @@
     margin:0;color:var(--ink);font-family:var(--font);
     font-weight:400;min-height:100dvh;overflow-x:hidden;
     padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
-    background:var(--bg);
+    background-color:var(--bg);background-image:var(--customer-bg-image,none);
+    background-size:cover;background-position:center;background-attachment:fixed;
   }
   body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none;
     background:
@@ -212,6 +213,20 @@
     background:linear-gradient(180deg,var(--card-hi),var(--card));
     border:1px solid var(--line);
     box-shadow:0 22px 46px -30px var(--shadow), inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent)}
+  .customer-section{background:var(--section-bg,linear-gradient(180deg,var(--card-hi),var(--card)));
+    color:var(--section-text,var(--ink));font-family:var(--section-font,var(--font));
+    border-color:color-mix(in srgb,var(--section-accent,var(--secondary)) 28%,transparent)}
+  .customer-section .eyebrow,.customer-section .muted,.customer-section .row .m{
+    color:color-mix(in srgb,var(--section-text,var(--ink)) 62%,transparent)}
+  .customer-section .eyebrow::after{background:linear-gradient(to left,
+    color-mix(in srgb,var(--section-accent,var(--secondary)) 48%,transparent),transparent)}
+  .customer-section .btn{background:var(--section-button-bg,var(--btn));
+    color:var(--section-button-text,var(--on-btn))}
+  .customer-section .pill{border-color:color-mix(in srgb,var(--section-accent,var(--secondary)) 35%,transparent)}
+  .member-card.customer-section{background:var(--section-bg);color:var(--section-text);
+    font-family:var(--section-font,var(--font));border-color:color-mix(in srgb,var(--section-accent) 55%,transparent)}
+  .member-card.customer-section .install-btn{background:var(--section-button-bg);
+    color:var(--section-button-text);border-color:color-mix(in srgb,var(--section-button-text) 28%,transparent)}
   .eyebrow{display:flex;align-items:center;gap:12px;margin:0 0 14px;
     font-size:12px;font-weight:600;color:var(--muted)}
   .eyebrow::after{content:"";height:1px;flex:1;
@@ -265,11 +280,14 @@
     background:
       radial-gradient(95% 55% at 50% -4%, color-mix(in srgb,var(--secondary) 13%,transparent), transparent 62%),
       linear-gradient(180deg,var(--card-hi),var(--card))}
+  .roulette.customer-section{background:var(--section-bg)}
   .wheel-shell{width:min(330px,84vw);height:min(330px,84vw);margin:24px auto 10px;position:relative;
     touch-action:none;user-select:none;-webkit-user-select:none;
     filter:drop-shadow(0 28px 40px var(--shadow))}
   .wheel-shell.armed{cursor:grab}
   .wheel-shell.dragging{cursor:grabbing}
+  .wheel-shell.haptic{animation:wheelHaptic .1s linear}
+  @keyframes wheelHaptic{0%,100%{translate:0 0}25%{translate:-1.5px .5px}75%{translate:1.5px -.5px}}
   .wheel-shell.armed::after{content:"";position:absolute;inset:-22px;border-radius:50%;z-index:0;
     box-shadow:0 0 60px var(--glow);opacity:.55;animation:breath 2.6s ease-in-out infinite;pointer-events:none}
   @keyframes breath{50%{opacity:1}}
@@ -502,6 +520,47 @@ const onColor=(c)=>lum(c)>.5?"#221912":"#ffffff";
 
 const DEFAULTS={color_primary:"#6F4E37",color_secondary:"#C8A97E",color_background:"#241812",color_button:"#C8A97E"};
 let brand={...DEFAULTS};
+let customerTheme={};
+const SAFE_FONTS={
+  inherit:"inherit",Tajawal:'Tajawal,system-ui,sans-serif',Cairo:'Cairo,system-ui,sans-serif',
+  Almarai:'Almarai,system-ui,sans-serif',"Noto Kufi Arabic":'"Noto Kufi Arabic",system-ui,sans-serif',
+  "IBM Plex Sans Arabic":'"IBM Plex Sans Arabic",system-ui,sans-serif'
+};
+const safeColor=v=>/^#[0-9a-f]{6}$/i.test(v||"")?v:null;
+function cleanCustomerTheme(raw){
+  const allowed=["page","membership","balance","roulette","rewards","visits"];
+  const out={};
+  for(const key of allowed){
+    const source=raw?.[key]; if(!source||typeof source!=="object") continue;
+    const section={};
+    for(const colorKey of ["background","text","muted","accent","button_background","button_text"]){
+      const value=safeColor(source[colorKey]); if(value) section[colorKey]=value;
+    }
+    if(SAFE_FONTS[source.font]) section.font=source.font;
+    if(key==="roulette") for(const textKey of ["top_text","locked_text","hint_text","button_label"]){
+      if(typeof source[textKey]==="string") section[textKey]=source[textKey].trim().slice(0,180);
+    }
+    out[key]=section;
+  }
+  return out;
+}
+function applyCustomerPageTheme(raw){
+  customerTheme=cleanCustomerTheme(raw);
+  const page=customerTheme.page||{}, root=document.documentElement.style;
+  root.removeProperty("--ink");root.removeProperty("--muted");root.removeProperty("--font");
+  if(page.background) root.setProperty("--bg",page.background);
+  if(page.text) root.setProperty("--ink",page.text);
+  if(page.muted) root.setProperty("--muted",page.muted);
+  if(page.font&&page.font!=="inherit") root.setProperty("--font",SAFE_FONTS[page.font]);
+}
+function applySectionTheme(element,key){
+  const section=customerTheme[key]||{}; if(!element) return;
+  const style=element.style;
+  for(const [source,target] of [["background","--section-bg"],["text","--section-text"],
+    ["accent","--section-accent"],["button_background","--section-button-bg"],
+    ["button_text","--section-button-text"]]) if(section[source]) style.setProperty(target,section[source]);
+  if(section.font) style.setProperty("--section-font",SAFE_FONTS[section.font]);
+}
 
 /* تطبيق هوية الكافيه: الألوان الأربعة + اشتقاق نمط داكن/فاتح + ألوان النص فوقها */
 function applyBrandTheme(cafe){
@@ -514,6 +573,10 @@ function applyBrandTheme(cafe){
   r.style.setProperty("--on-secondary",onColor(brand.color_secondary));
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.content=brand.color_background;
+  const backgroundUrl=safeHttpUrl(cafe?.background_url);
+  document.body.style.setProperty("--customer-bg-image",backgroundUrl
+    ? `linear-gradient(var(--scrim),var(--scrim)),url(${JSON.stringify(backgroundUrl)})`:"none");
+  applyCustomerPageTheme(cafe?.customer_theme);
   // كُشِفت ألوان المحل — نُزيل الحالة المحايدة فتظهر الهوية مباشرة
   r.classList.remove("pre-brand");
 }
@@ -547,7 +610,8 @@ async function load(){
     try{ localStorage.setItem(brandKey, JSON.stringify({
       name:cafe.name, logo_url:cafe.logo_url,
       color_primary:cafe.color_primary, color_secondary:cafe.color_secondary,
-      color_background:cafe.color_background, color_button:cafe.color_button
+      color_background:cafe.color_background, color_button:cafe.color_button,
+      background_url:cafe.background_url,customer_theme:cafe.customer_theme
     })); }catch(e){}
     if(state.requires_verification) showVerification();
     else render();
@@ -609,6 +673,12 @@ function render(){
   const remain=Math.max(0,need-bal);
   const percent=Math.min(100,Math.round((bal/need)*100));
   const canSpin=!!c.pending_spin_visit_id;
+  const rouletteTheme=customerTheme.roulette||{};
+  const rouletteTop=canSpin
+    ? (rouletteTheme.top_text||"لديك دورة مؤهلة من زيارتك الأخيرة — جرّب حظك.")
+    : (rouletteTheme.locked_text||"دورتك القادمة تُفتح بعد زيارتك المؤهلة القادمة.");
+  const rouletteHint=rouletteTheme.hint_text||"اسحب العجلة بقوة وأفلتها — أو اضغط الزر";
+  const rouletteButton=rouletteTheme.button_label||"أدر العجلة";
   const logoUrl=safeHttpUrl(cafe.logo_url);
   const logo=logoUrl?`<img src="${escapeHTML(logoUrl)}" alt="">`:"☕";
 
@@ -631,7 +701,7 @@ function render(){
 
   $("#content").innerHTML=`
     <section class="hero reveal">
-      <div class="member-card" id="memberCard">
+      <div class="member-card customer-section" data-customer-section="membership" id="memberCard">
         <div class="mc-top">
           <div class="mc-brand">
             <div class="mc-logo">${logo}</div>
@@ -653,7 +723,7 @@ function render(){
       </div>
     </section>
 
-    <section class="card reveal">
+    <section class="card customer-section reveal" data-customer-section="balance">
       <p class="eyebrow">رصيد الأكواب</p>
       <div class="bal-row">
         <span class="bal-num">${bal}</span><span class="bal-of">من ${need}</span>
@@ -663,10 +733,9 @@ function render(){
       <p class="remain">${remain===0?"🎉 كوبك المجاني بانتظارك — أخبر الباريستا!":`باقٍ ${remain} ${remain==1?"كوب واحد":"أكواب"} على كوبك المجاني`}</p>
     </section>
 
-    <section class="card roulette reveal">
+    <section class="card customer-section roulette reveal" data-customer-section="roulette">
       <p class="eyebrow">روليت المكافآت</p>
-      <p class="muted" id="rouletteText">
-        ${canSpin?"لديك دورة مؤهلة من زيارتك الأخيرة — جرّب حظك.":"دورتك القادمة تُفتح بعد زيارتك المؤهلة القادمة."}</p>
+      <p class="muted" id="rouletteText">${escapeHTML(rouletteTop)}</p>
       <div class="wheel-shell ${canSpin?"armed":""}" id="wheelShell">
         <div class="bezel"></div>
         <div class="wheel" id="wheel">
@@ -677,27 +746,28 @@ function render(){
         <div class="wheel-lamps" id="wheelLamps"></div>
         <div class="wheel-pointer" id="pointer"></div>
       </div>
-      ${canSpin?`<p class="drag-hint">اسحب العجلة بقوة وأفلتها — أو اضغط الزر</p>`:""}
+      ${canSpin?`<p class="drag-hint">${escapeHTML(rouletteHint)}</p>`:""}
       <button class="btn" id="spinBtn" ${canSpin?"":"disabled"}>
-        ${canSpin?"أدر العجلة":"غير متاح حاليًا"}</button>
+        ${canSpin?escapeHTML(rouletteButton):"غير متاح حاليًا"}</button>
       <div class="result" id="spinResult"></div>
     </section>
 
-    <section class="card reveal">
+    <section class="card customer-section reveal" data-customer-section="rewards">
       <p class="eyebrow">مكافآتي</p>
       <p class="muted">اعرضها للباريستا عند زيارتك.</p>
       <div class="list">${rewards}</div>
     </section>
 
-    <section class="card reveal">
+    <section class="card customer-section reveal" data-customer-section="visits">
       <p class="eyebrow">آخر الزيارات</p>
       <div class="list">${visits}</div>
     </section>
   `;
   $("#content").style.display="block";
+  document.querySelectorAll("[data-customer-section]").forEach(el=>applySectionTheme(el,el.dataset.customerSection));
 
-  wheelLabelsArr=(c.roulette_preview||[]).map(p=>p.label);
-  drawWheel(wheelLabelsArr.length?wheelLabelsArr:["خصم","ترقية","إضافة","كوب مجاني","نقاط","حظ أوفر"]);
+  const preview=(c.roulette_preview||[]);
+  drawWheel(preview.length?preview:["خصم","ترقية","إضافة","كوب مجاني","نقاط","حظ أوفر"].map(label=>({label})));
   $("#wheel").style.transform=`rotate(${currentRotation}deg)`;
 
   $("#spinBtn").onclick=()=>{ if(canSpinNow()) startSpin(900); };
@@ -721,9 +791,11 @@ function initTilt(){
 
 /* ================= رسم العجلة — ألوان مشتقة من الهوية ونص متباين تلقائيًا ================= */
 let segColors=[];
-function drawWheel(labels){
-  const seg=(labels&&labels.length)?labels:["1","2","3","4","5","6"];
-  const n=seg.length;
+function drawWheel(input){
+  const segments=(input&&input.length?input:["1","2","3","4","5","6"])
+    .map(item=>typeof item==="string"?{label:item}:item);
+  wheelLabelsArr=segments.map(item=>String(item?.label||"جائزة"));
+  const n=segments.length;
   const P=brand.color_primary, S=brand.color_secondary;
   const palette=[
     mixC(P,"#000000",.16),
@@ -733,7 +805,7 @@ function drawWheel(labels){
     mixC(P,"#ffffff",.16),
     mixC(S,"#ffffff",.22),
   ];
-  segColors=Array.from({length:n},(_,i)=>palette[i%palette.length]);
+  segColors=segments.map((item,i)=>safeColor(item?.color)||palette[i%palette.length]);
   /* لا يتكرر لونان متجاوران عند التفاف العجلة */
   if(n>1 && segColors[n-1]===segColors[0]) segColors[n-1]=palette[(n+2)%palette.length];
 
@@ -752,7 +824,7 @@ function drawWheel(labels){
   const shellW=(shellEl()?.offsetWidth)||330;
   const labelR=Math.round((shellW/2-9)*.63), lampR=Math.round(shellW/2+6);
   const box=$("#wheelLabels"); if(box){ box.innerHTML="";
-    seg.forEach((label,i)=>{
+    wheelLabelsArr.forEach((label,i)=>{
       const mid=(360/n)*i+(360/n)/2;
       const el=document.createElement("div"); el.className="wheel-label";
       /* نص شعاعي كالعجلات الحقيقية — صحيح مهما دارت العجلة */
@@ -777,7 +849,9 @@ function vibrate(p){ if(navigator.vibrate) try{navigator.vibrate(p);}catch(e){} 
 function tickFX(strength=1){
   const p=$("#pointer");
   if(p){ p.classList.add("kick"); setTimeout(()=>p.classList.remove("kick"),60); }
-  vibrate(Math.round(5*strength));
+  const shell=$("#wheelShell");
+  if(shell){shell.classList.remove("haptic");requestAnimationFrame(()=>shell.classList.add("haptic"));}
+  vibrate(Math.round(8*strength));
   if(!audioCtx) return;
   const o=audioCtx.createOscillator(), g=audioCtx.createGain();
   o.type="square"; o.frequency.value=820+Math.random()*120;
@@ -909,12 +983,11 @@ function startSpin(v0DegPerSec){
       shell.classList.remove("spinning"); shell.classList.add("armed");
       if(err.message==="ALREADY_SPUN") toast("سبق اللعب على هذه الزيارة",true);
       else toast("تعذّر اللعب — حاول مجددًا",true);
-      btn.disabled=false; btn.textContent="أدر العجلة"; spinning=false;
+      btn.disabled=false; btn.textContent=customerTheme.roulette?.button_label||"أدر العجلة"; spinning=false;
       return;
     }
     /* عجلة السيرفر هي الحقيقة */
-    wheelLabelsArr=(res.wheel||[]).map(w=>w.label);
-    drawWheel(wheelLabelsArr);
+    drawWheel(res.wheel||[]);
     const n=wheelLabelsArr.length||6;
     const idx=Math.max(0,wheelLabelsArr.indexOf(res.prize_label));
     const segMid=(360/n)*idx+(360/n)/2;

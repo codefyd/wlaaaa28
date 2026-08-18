@@ -59,6 +59,15 @@
   .badge.pend{background:#f3ece0;color:#9a7b4f}
   .badge.laps{background:#f7e9e9;color:#b03636}
   #customersTable td:first-child{font-weight:700}
+  .theme-intro{color:var(--muted);font-size:13px;line-height:1.8;margin:4px 0 16px}
+  .theme-editor{display:grid;gap:12px;margin-top:18px}
+  .theme-section{border:1px solid var(--line);border-radius:15px;padding:15px;background:#faf9f7}
+  .theme-section h4{margin:0 0 12px;font-size:15px}
+  .theme-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:11px}
+  .theme-grid label{font-size:12px;margin-top:0}
+  .theme-grid input,.theme-grid select{font-size:14px;padding:10px}
+  .theme-copy{grid-column:1/-1}
+  .identity-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
   @media(max-width:560px){.prize-row{grid-template-columns:1fr 1fr;}.prize-row .pct{grid-column:1/-1}}
 </style>
 </head>
@@ -157,6 +166,7 @@
     <div class="panel" id="p-identity">
       <div class="card">
         <h3>الهوية البصرية</h3>
+        <p class="theme-intro">الإعدادات الأساسية للكافيه، ثم تخصيص مستقل لكل جزء في صفحة العميل.</p>
         <div class="grid">
           <div><label>اسم الكافيه</label><input id="f_name"></div>
           <div><label>رابط الشعار</label><input id="f_logo" placeholder="https://..."></div>
@@ -172,7 +182,12 @@
           <div><label>رابط صورة الخلفية (اختياري)</label><input id="f_bgurl"></div>
           <div><label>رابط أيقونة التطبيق</label><input id="f_icon"></div>
         </div>
-        <button class="btn" id="saveIdentity" style="margin-top:16px">حفظ الهوية</button>
+        <div id="themeEditor" class="theme-editor"></div>
+        <div class="identity-actions">
+          <button class="btn" id="saveIdentity">حفظ الهوية والتخصيص</button>
+          <button class="btn ghost" id="resetCustomerTheme" type="button">استعادة ألوان الهوية الأساسية</button>
+          <button class="btn ghost" id="previewCustomerPage" type="button">معاينة صفحة العميل</button>
+        </div>
       </div>
     </div>
 
@@ -255,20 +270,92 @@ async function init(){
   runReport();
 }
 
-/* الهوية */
+/* الهوية وتخصيص صفحة العميل */
+const FONT_OPTIONS=[
+  ["inherit","يتبع خط الصفحة"],["Tajawal","Tajawal"],["Cairo","Cairo"],
+  ["Almarai","Almarai"],["Noto Kufi Arabic","Noto Kufi Arabic"],
+  ["IBM Plex Sans Arabic","IBM Plex Sans Arabic"]
+];
+const THEME_SECTIONS=[
+  ["page","الصفحة كاملة"],["membership","بطاقة العضوية"],
+  ["balance","رصيد الأكواب"],["roulette","روليت المكافآت"],
+  ["rewards","مكافآتي"],["visits","آخر الزيارات"]
+];
+let themeDraft={};
+const validColor=(v,fallback)=>/^#[0-9a-f]{6}$/i.test(v||"")?v:fallback;
+function customerThemeDefaults(){
+  const primary=validColor(cafe.color_primary,"#6F4E37");
+  const secondary=validColor(cafe.color_secondary,"#C8A97E");
+  const background=validColor(cafe.color_background,"#241812");
+  const button=validColor(cafe.color_button,secondary);
+  return {
+    page:{background,text:"#F8F4ED",muted:"#B6AA9E",font:"Tajawal"},
+    membership:{background:primary,text:"#FFFFFF",accent:secondary,
+      button_background:"#FFFFFF",button_text:primary,font:"inherit"},
+    balance:{background:"#30241E",text:"#F8F4ED",accent:secondary,font:"inherit"},
+    roulette:{background:"#30241E",text:"#F8F4ED",accent:secondary,
+      button_background:button,button_text:"#241812",font:"inherit",
+      top_text:"لديك دورة مؤهلة من زيارتك الأخيرة — جرّب حظك.",
+      locked_text:"دورتك القادمة تُفتح بعد زيارتك المؤهلة القادمة.",
+      hint_text:"اسحب العجلة بقوة وأفلتها — أو اضغط الزر",
+      button_label:"أدر العجلة"},
+    rewards:{background:"#30241E",text:"#F8F4ED",accent:secondary,font:"inherit"},
+    visits:{background:"#30241E",text:"#F8F4ED",accent:secondary,font:"inherit"}
+  };
+}
+function mergedCustomerTheme(source=cafe.customer_theme){
+  const defaults=customerThemeDefaults(), saved=source&&typeof source==="object"?source:{};
+  return Object.fromEntries(THEME_SECTIONS.map(([key])=>[key,{...defaults[key],...(saved[key]||{})}]));
+}
+function colorField(section,key,label,value){
+  return `<div><label>${label}</label><input type="color" data-theme-section="${section}" data-theme-key="${key}" value="${validColor(value,"#6F4E37")}"></div>`;
+}
+function renderThemeEditor(source=cafe.customer_theme){
+  themeDraft=mergedCustomerTheme(source);
+  $("#themeEditor").innerHTML=THEME_SECTIONS.map(([key,title])=>{
+    const s=themeDraft[key];
+    const colors=key==="page"
+      ? colorField(key,"background","الخلفية",s.background)+colorField(key,"text","النص",s.text)+colorField(key,"muted","النص الثانوي",s.muted)
+      : colorField(key,"background","خلفية القسم",s.background)+colorField(key,"text","نص القسم",s.text)+colorField(key,"accent","لون التمييز",s.accent);
+    const buttons=["membership","roulette"].includes(key)
+      ? colorField(key,"button_background","خلفية الزر",s.button_background)+colorField(key,"button_text","نص الزر",s.button_text):"";
+    const font=`<div><label>الخط</label><select data-theme-section="${key}" data-theme-key="font">${FONT_OPTIONS.map(([v,l])=>`<option value="${v}" ${s.font===v?"selected":""}>${l}</option>`).join("")}</select></div>`;
+    const copy=key==="roulette"?`<div class="theme-copy"><label>النص أعلى العجلة عند توفر دورة</label><input data-theme-section="roulette" data-theme-key="top_text" value="${escapeHTML(s.top_text)}"></div>
+      <div class="theme-copy"><label>النص أعلى العجلة عند عدم توفر دورة</label><input data-theme-section="roulette" data-theme-key="locked_text" value="${escapeHTML(s.locked_text)}"></div>
+      <div class="theme-copy"><label>النص أسفل العجلة</label><input data-theme-section="roulette" data-theme-key="hint_text" value="${escapeHTML(s.hint_text)}"></div>
+      <div><label>كتابة زر الروليت</label><input data-theme-section="roulette" data-theme-key="button_label" value="${escapeHTML(s.button_label)}"></div>`:"";
+    return `<div class="theme-section"><h4>${title}</h4><div class="theme-grid">${colors}${buttons}${font}${copy}</div></div>`;
+  }).join("");
+}
+function collectCustomerTheme(){
+  const out=structuredClone(themeDraft);
+  $("#themeEditor").querySelectorAll("[data-theme-section]").forEach(el=>{
+    out[el.dataset.themeSection][el.dataset.themeKey]=el.value.trim().slice(0,180);
+  });
+  return out;
+}
 function fillIdentity(){
   $("#f_name").value=cafe.name||""; $("#f_logo").value=cafe.logo_url||"";
   $("#f_primary").value=cafe.color_primary; $("#f_secondary").value=cafe.color_secondary;
   $("#f_bg").value=cafe.color_background; $("#f_btn").value=cafe.color_button;
   $("#f_theme").value=cafe.theme; $("#f_bgurl").value=cafe.background_url||"";
   $("#f_icon").value=cafe.app_icon_url||"";
+  renderThemeEditor();
 }
+$("#resetCustomerTheme").onclick=()=>{renderThemeEditor({});toast("تمت استعادة القيم في النموذج — اضغط حفظ لتطبيقها");};
+$("#previewCustomerPage").onclick=async()=>{
+  const {data,error}=await sb.from("customers").select("public_code")
+    .eq("cafe_id",cafeId).not("public_code","is",null).order("created_at",{ascending:false})
+    .limit(1).maybeSingle();
+  if(error||!data?.public_code) return toast("أضف عميلًا أولًا لفتح المعاينة",true);
+  window.open(`./#${encodeURIComponent(data.public_code)}`,"_blank","noopener");
+};
 $("#saveIdentity").onclick=async()=>{
   const patch={name:$("#f_name").value.trim(),logo_url:$("#f_logo").value.trim()||null,
     color_primary:$("#f_primary").value,color_secondary:$("#f_secondary").value,
     color_background:$("#f_bg").value,color_button:$("#f_btn").value,
     theme:$("#f_theme").value,background_url:$("#f_bgurl").value.trim()||null,
-    app_icon_url:$("#f_icon").value.trim()||null};
+    app_icon_url:$("#f_icon").value.trim()||null,customer_theme:collectCustomerTheme()};
   const { error }=await sb.from("cafes").update(patch).eq("id",cafeId);
   if(error) return toast("تعذّر الحفظ",true);
   Object.assign(cafe,patch); $("#cafeName").textContent=cafe.name; applyBrand(cafe); toast("تم حفظ الهوية");

@@ -37,6 +37,15 @@
   .result .big{font-size:17px;font-weight:800;color:var(--ok)}
   .result .sub{font-size:14px;color:var(--muted);margin-top:6px}
   .found{font-size:14px;color:var(--ok);font-weight:700;margin-top:8px;min-height:20px}
+  .phone-row{display:grid;grid-template-columns:1fr 92px;gap:9px;align-items:end}
+  .phone-row .btn{margin:0;height:50px;padding:10px}
+  .new-customer{display:none;margin-top:14px;padding:14px;border-radius:14px;
+    background:#fffaf1;border:1px solid #ead9b8}
+  .new-customer.show,.transaction.show{display:block}
+  .new-customer label{margin-top:0}
+  .new-customer .btn{margin-top:10px}
+  .transaction{display:none;animation:fadeIn .22s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   .reward-chip{display:inline-flex;align-items:center;gap:8px;background:#fff5e6;
     border:1px solid #f0d9a8;border-radius:12px;padding:10px 14px;margin-top:10px;
     font-size:14px;font-weight:700;width:100%;justify-content:space-between}
@@ -72,26 +81,34 @@
     </div>
     <div class="card">
       <label>رقم جوال العميل</label>
-      <input id="phone" type="tel" inputmode="numeric" placeholder="05xxxxxxxx" />
+      <div class="phone-row">
+        <input id="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="05xxxxxxxx" />
+        <button class="btn" id="lookupBtn" type="button">إضافة</button>
+      </div>
       <div class="found" id="found"></div>
 
-      <label>اسم العميل (اختياري — لأول مرة)</label>
-      <input id="cname" type="text" placeholder="اسم العميل" />
-
-      <label>عدد الأكواب</label>
-      <div class="cups-input">
-        <button id="minus" type="button">−</button>
-        <input id="cups" type="number" value="1" min="1" max="100" />
-        <button id="plus" type="button">+</button>
+      <div class="new-customer" id="newCustomerBox">
+        <label>عميل جديد — الاسم اختياري</label>
+        <input id="cname" type="text" autocomplete="name" placeholder="اسم العميل (يمكن تركه فارغًا)" />
+        <button class="btn ghost" id="continueNewBtn" type="button">متابعة</button>
       </div>
 
-      <label>الفرع</label>
-      <select id="branch"><option value="">— بدون تحديد —</option></select>
+      <div class="transaction" id="transactionBox">
+        <label>عدد الأكواب</label>
+        <div class="cups-input">
+          <button id="minus" type="button">−</button>
+          <input id="cups" type="number" value="1" min="1" max="100" />
+          <button id="plus" type="button">+</button>
+        </div>
 
-      <label>ملاحظة (اختياري)</label>
-      <input id="note" type="text" placeholder="" />
+        <label>الفرع</label>
+        <select id="branch"><option value="">— بدون تحديد —</option></select>
 
-      <button class="btn" id="submitBtn">اعتماد العملية</button>
+        <label>ملاحظة (اختياري)</label>
+        <input id="note" type="text" placeholder="" />
+
+        <button class="btn" id="submitBtn">إضافة العملية وفتح واتساب</button>
+      </div>
 
       <div class="result" id="result"></div>
 
@@ -145,35 +162,56 @@ async function initWork(){
   (branches||[]).forEach(b=>{const o=document.createElement("option");o.value=b.id;o.textContent=b.name;sel.appendChild(o);});
 }
 
-// بحث عن العميل عند كتابة الرقم (بعد توقف الكتابة)
-let t;
-$("#phone").oninput = () => { clearTimeout(t); currentCustomer=null; $("#found").textContent="";
-  $("#waBtn").style.display="none"; $("#result").classList.remove("show");
-  $("#rewardBox").innerHTML=""; t=setTimeout(lookup, 500); };
+function resetCustomer(){
+  currentCustomer=null;
+  $("#found").textContent="";
+  $("#newCustomerBox").classList.remove("show");
+  $("#transactionBox").classList.remove("show");
+  $("#waBtn").style.display="none";
+  $("#result").classList.remove("show");
+  $("#rewardBox").innerHTML="";
+}
+$("#phone").oninput=resetCustomer;
 
-// بحث فقط عبر السيرفر (تطبيع موحّد، بدون إنشاء).
-async function lookup(){
-  const phone=$("#phone").value.trim();
-  const digits=phone.replace(/\D/g,"");
-  if(digits.length < 9) return;
-  try{
-    const r = await callFn("customer-upsert",
-      { cafe_id:cafeId, phone, search_only:true }, true);
-    if(r.found){
-      currentCustomer = { customer_id:r.customer_id, full_name:r.full_name, existing:true };
-      if(r.full_name) $("#cname").value = r.full_name;
-      $("#found").textContent = `✓ عميل مسجّل: ${r.full_name||"—"}`;
-      renderRewards(r.rewards||[]);
-    }else{
-      currentCustomer = null;
-      $("#rewardBox").innerHTML="";
-      $("#found").textContent = "عميل جديد — اكتب الاسم (اختياري) ثم اعتمد العملية";
-    }
-  }catch(e){ /* صامت أثناء الكتابة */ }
+function showTransaction(customer){
+  currentCustomer=customer;
+  $("#newCustomerBox").classList.remove("show");
+  $("#transactionBox").classList.add("show");
+  $("#found").textContent=`✓ ${customer.full_name||"العميل جاهز"}`;
+  renderRewards(customer.rewards||[]);
 }
 
-$("#waBtn").onclick = () => {
-  const link=$("#waBtn").dataset.link; if(link) window.open(link,"_blank");
+async function prepareCustomer(fullName=null){
+  const phone=$("#phone").value.trim();
+  const digits=phone.replace(/\D/g,"");
+  if(digits.length<9) throw new Error("INVALID_PHONE");
+  return callFn("customer-upsert",{
+    cafe_id:cafeId,phone,full_name:fullName||null,
+    client_base_url:new URL(".",location.href).href
+  },true);
+}
+
+$("#lookupBtn").onclick=async()=>{
+  const btn=$("#lookupBtn"); btn.disabled=true; btn.textContent="…";
+  resetCustomer();
+  try{
+    const customer=await prepareCustomer();
+    if(customer.is_new){
+      currentCustomer=customer;
+      $("#found").textContent="الرقم غير مسجّل — أضف الاسم إن رغبت";
+      $("#newCustomerBox").classList.add("show");
+      $("#cname").focus();
+    }else showTransaction(customer);
+  }catch(e){
+    toast(e.message==="INVALID_PHONE"?"أدخل رقم جوال صحيح":"تعذّر البحث عن العميل",true);
+  }finally{btn.disabled=false;btn.textContent="إضافة";}
+};
+
+$("#continueNewBtn").onclick=async()=>{
+  const btn=$("#continueNewBtn");btn.disabled=true;btn.textContent="جارٍ التجهيز…";
+  try{ showTransaction(await prepareCustomer($("#cname").value.trim()||null)); }
+  catch(e){ toast("تعذّر تجهيز العميل",true); }
+  finally{btn.disabled=false;btn.textContent="متابعة";}
 };
 
 // عداد الأكواب
@@ -189,25 +227,16 @@ $("#waBtn").onclick=()=>{
 $("#submitBtn").onclick = async () => {
   const phone=$("#phone").value.trim();
   if(phone.replace(/\D/g,"").length < 9) return toast("أدخل رقم جوال صحيح", true);
+  if(!currentCustomer?.customer_id) return toast("اضغط إضافة لتجهيز العميل أولًا",true);
   const cups=Math.min(100,Math.max(1,+$("#cups").value||1));
-  // فتح نافذة فارغة من نقرة الموظف مباشرة يمنع المتصفح من حظر واتساب بعد انتظار الشبكة.
-  const whatsappWindow=window.open("","_blank");
-  if(whatsappWindow){
-    whatsappWindow.opener=null;
-    whatsappWindow.document.title="جارٍ تجهيز رسالة واتساب…";
-    whatsappWindow.document.body.textContent="جارٍ تسجيل العملية وتجهيز رسالة العميل…";
-  }
+  // الرابط جُهّز مسبقًا عند إضافة الرقم، لذلك يفتح واتساب مباشرة بلا صفحة انتظار وسيطة.
+  const waLink=currentCustomer.wa_web_link||currentCustomer.wa_link||"";
+  const whatsappWindow=waLink?window.open(waLink,"_blank","noopener,noreferrer"):null;
   $("#submitBtn").disabled=true;
   try{
-    // 1) تأكد من وجود العميل (يُنشأ الآن إن كان جديدًا) ويرجّع رابط صفحته
-    const up = await callFn("customer-upsert",
-      { cafe_id:cafeId, phone, full_name:$("#cname").value.trim()||null,
-        client_base_url:new URL(".",location.href).href }, true);
-    currentCustomer = up;
-
-    // 2) سجّل الزيارة وأضف الأكواب
+    // العميل جُهّز مسبقًا؛ هنا نسجّل الزيارة فقط.
     const res = await sb.rpc("add_visit",{
-      p_customer: up.customer_id, p_cups: cups,
+      p_customer: currentCustomer.customer_id, p_cups: cups,
       p_branch: $("#branch").value||null, p_note: $("#note").value.trim()||null });
     if(res.error) throw res.error;
     const d = res.data;
@@ -219,23 +248,19 @@ $("#submitBtn").onclick = async () => {
       <div class="sub">العميل مؤهل للعب الروليت من صفحته</div>`;
     box.classList.add("show");
 
-    // 3) زر إرسال رابط العميل عبر واتساب ويب (يظهر دائمًا بعد الاعتماد)
+    // زر احتياطي لإعادة فتح واتساب إذا أغلقه الموظف.
     const waBtn=$("#waBtn");
-    waBtn.dataset.link = up.wa_link || "";
+    waBtn.dataset.link = waLink;
     waBtn.style.display = "block";
     waBtn.textContent = "📲 فتح واتساب مرة أخرى";
-    if(!up.wa_link) waBtn.style.display="none";  // لو غاب الرابط لأي سبب
-
-    if(up.wa_link && whatsappWindow) whatsappWindow.location.replace(up.wa_link);
-    else if(whatsappWindow) whatsappWindow.close();
-    else if(up.wa_link) toast("المتصفح منع فتح واتساب — اضغط زر واتساب",true);
+    if(!waLink) waBtn.style.display="none";
+    if(waLink&&!whatsappWindow) toast("المتصفح منع فتح واتساب — اضغط زر واتساب",true);
 
     toast("تم الاعتماد");
-    loadRewards(up.customer_id);
-    $("#found").textContent = `✓ ${up.full_name||"العميل"}`;
+    loadRewards(currentCustomer.customer_id);
+    $("#found").textContent = `✓ ${currentCustomer.full_name||"العميل"}`;
     $("#note").value="";
   }catch(e){
-    if(whatsappWindow) whatsappWindow.close();
     const m = String(e.message||e);
     toast(m.includes("DAILY_LIMIT")?"تجاوز الحد اليومي":"تعذّر الاعتماد", true);
   }finally{ $("#submitBtn").disabled=false; }

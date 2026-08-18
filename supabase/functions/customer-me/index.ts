@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     if (!customer) return json(req, { error: "INVALID_TOKEN" }, 401);
 
     const { data: cafe, error: cafeError } = await admin.from("cafes")
-      .select("name,logo_url,color_primary,color_secondary,color_background,color_button,theme,background_url,cups_per_reward,require_verification,is_active")
+      .select("name,logo_url,color_primary,color_secondary,color_background,color_button,theme,background_url,customer_theme,cups_per_reward,require_verification,is_active")
       .eq("id", customer.cafe_id).maybeSingle();
     if (cafeError) throw cafeError;
     if (!cafe?.is_active) return json(req, { error: "CAFE_INACTIVE" }, 403);

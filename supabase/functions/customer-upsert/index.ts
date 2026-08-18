@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
       .select(customerFields)
       .eq("cafe_id", cafeId).eq("phone", phone).maybeSingle();
     if (lookupError) throw lookupError;
+    const isNewCustomer = !customer;
 
     if (payload.search_only) {
       if (!customer) return json(req, { found: false });
@@ -155,13 +156,21 @@ Deno.serve(async (req) => {
       verificationCode ? `رمز التحقق: ${verificationCode}\nصالح لمدة 10 دقائق.` : null,
       "نتمنى لك يومًا جميلًا 🤎",
     ].filter(Boolean).join("\n\n");
+    const encodedMessage = encodeURIComponent(message);
+    const { data: rewards, error: rewardsError } = await admin.from("rewards")
+      .select("id,label").eq("customer_id", customer.id).eq("status", "available")
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+    if (rewardsError) throw rewardsError;
 
     return json(req, {
       customer_id: customer.id,
       full_name: customer.full_name,
+      is_new: isNewCustomer,
       verified: !!customer.verified_at,
       customer_code: customer.public_code,
-      wa_link: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+      rewards: rewards ?? [],
+      wa_link: `https://wa.me/${phone}?text=${encodedMessage}`,
+      wa_web_link: `https://web.whatsapp.com/send?phone=${phone}&text=${encodedMessage}`,
       client_link: shortLink,
     });
   } catch {
