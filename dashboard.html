@@ -185,7 +185,7 @@
         <div id="themeEditor" class="theme-editor"></div>
         <div class="identity-actions">
           <button class="btn" id="saveIdentity">حفظ الهوية والتخصيص</button>
-          <button class="btn ghost" id="resetCustomerTheme" type="button">استعادة ألوان الهوية الأساسية</button>
+          <button class="btn ghost" id="resetCustomerTheme" type="button">توليد ألوان متناسقة من الهوية</button>
           <button class="btn ghost" id="previewCustomerPage" type="button">معاينة صفحة العميل</button>
         </div>
       </div>
@@ -283,24 +283,35 @@ const THEME_SECTIONS=[
 ];
 let themeDraft={};
 const validColor=(v,fallback)=>/^#[0-9a-f]{6}$/i.test(v||"")?v:fallback;
+function colorRgb(c){c=validColor(c,"#000000").slice(1);return [0,2,4].map(i=>parseInt(c.slice(i,i+2),16));}
+const colorHex=rgb=>"#"+rgb.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("");
+const colorMix=(a,b,t)=>colorHex(colorRgb(a).map((v,i)=>v+(colorRgb(b)[i]-v)*t));
+function colorLum(c){const [r,g,b]=colorRgb(c).map(v=>{v/=255;return v<=.03928?v/12.92:((v+.055)/1.055)**2.4;});return .2126*r+.7152*g+.0722*b;}
+const colorContrast=(a,b)=>{const x=colorLum(a),y=colorLum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+const textOn=c=>colorContrast(c,"#FFFFFF")>=colorContrast(c,"#18201F")?"#FFFFFF":"#18201F";
 function customerThemeDefaults(){
-  const primary=validColor(cafe.color_primary,"#6F4E37");
-  const secondary=validColor(cafe.color_secondary,"#C8A97E");
-  const background=validColor(cafe.color_background,"#241812");
-  const button=validColor(cafe.color_button,secondary);
+  const primary=validColor($("#f_primary")?.value||cafe.color_primary,"#6F4E37");
+  const secondary=validColor($("#f_secondary")?.value||cafe.color_secondary,"#C8A97E");
+  const background=validColor($("#f_bg")?.value||cafe.color_background,"#241812");
+  const button=validColor($("#f_btn")?.value||cafe.color_button,secondary);
+  const heroCandidate=colorContrast(primary,background)>=1.8?primary:secondary;
+  const hero=colorLum(heroCandidate)>.88?secondary:heroCandidate;
+  const card=colorLum(background)>.48?colorMix(background,"#000000",.08):colorMix(background,"#FFFFFF",.78);
+  const altCard=colorMix(card,secondary,.055);
+  const roulette=colorMix(card,secondary,.12);
   return {
-    page:{background,text:"#F8F4ED",muted:"#B6AA9E",font:"Tajawal"},
-    membership:{background:primary,text:"#FFFFFF",accent:secondary,
-      button_background:"#FFFFFF",button_text:primary,font:"inherit"},
-    balance:{background:"#30241E",text:"#F8F4ED",accent:secondary,font:"inherit"},
-    roulette:{background:"#30241E",text:"#F8F4ED",accent:secondary,
-      button_background:button,button_text:"#241812",font:"inherit",
+    page:{background,text:textOn(background),muted:colorMix(textOn(background),background,.34),font:"inherit"},
+    membership:{background:hero,text:textOn(hero),accent:secondary,
+      button_background:textOn(hero),button_text:hero,font:"inherit"},
+    balance:{background:card,text:textOn(card),accent:secondary,font:"inherit"},
+    roulette:{background:roulette,text:textOn(roulette),accent:primary,
+      button_background:button,button_text:textOn(button),font:"inherit",
       top_text:"لديك دورة مؤهلة من زيارتك الأخيرة — جرّب حظك.",
       locked_text:"دورتك القادمة تُفتح بعد زيارتك المؤهلة القادمة.",
       hint_text:"اسحب العجلة بقوة وأفلتها — أو اضغط الزر",
       button_label:"أدر العجلة"},
-    rewards:{background:"#30241E",text:"#F8F4ED",accent:secondary,font:"inherit"},
-    visits:{background:"#30241E",text:"#F8F4ED",accent:secondary,font:"inherit"}
+    rewards:{background:altCard,text:textOn(altCard),accent:secondary,font:"inherit"},
+    visits:{background:card,text:textOn(card),accent:secondary,font:"inherit"}
   };
 }
 function mergedCustomerTheme(source=cafe.customer_theme){
@@ -342,7 +353,7 @@ function fillIdentity(){
   $("#f_icon").value=cafe.app_icon_url||"";
   renderThemeEditor();
 }
-$("#resetCustomerTheme").onclick=()=>{renderThemeEditor({});toast("تمت استعادة القيم في النموذج — اضغط حفظ لتطبيقها");};
+$("#resetCustomerTheme").onclick=()=>{renderThemeEditor({});toast("تم توليد لوحة متناسقة — اضغط حفظ لتطبيقها");};
 $("#previewCustomerPage").onclick=async()=>{
   const {data,error}=await sb.from("customers").select("public_code")
     .eq("cafe_id",cafeId).not("public_code","is",null).order("created_at",{ascending:false})

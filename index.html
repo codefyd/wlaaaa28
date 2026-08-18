@@ -91,13 +91,19 @@
     margin:0;color:var(--ink);font-family:var(--font);
     font-weight:400;min-height:100dvh;overflow-x:hidden;
     padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
-    background-color:var(--bg);background-image:var(--customer-bg-image,none);
-    background-size:cover;background-position:center;background-attachment:fixed;
+    background-color:var(--bg);
   }
-  body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none;
-    background:
+  /* الخلفية على طبقة ثابتة مستقلة بدل background-attachment:fixed؛
+     هذا يمنع اختلاف القص والتمدد بين سطح المكتب ومتصفحات الجوال. */
+  body::before{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;
+    background-image:
       radial-gradient(46% 36% at 84% -6%, var(--amb-1), transparent 70%),
-      radial-gradient(54% 46% at -10% 106%, var(--amb-2), transparent 70%);
+      radial-gradient(54% 46% at -10% 106%, var(--amb-2), transparent 70%),
+      linear-gradient(var(--customer-bg-overlay,transparent),var(--customer-bg-overlay,transparent)),
+      var(--customer-bg-photo,none);
+    background-size:auto,auto,cover,cover;
+    background-position:center;
+    background-repeat:no-repeat;
   }
   body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:var(--etch);
     background:repeating-conic-gradient(from 0deg at 50% -22%,
@@ -213,20 +219,30 @@
     background:linear-gradient(180deg,var(--card-hi),var(--card));
     border:1px solid var(--line);
     box-shadow:0 22px 46px -30px var(--shadow), inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent)}
-  .customer-section{background:var(--section-bg,linear-gradient(180deg,var(--card-hi),var(--card)));
+  .card.customer-section{background:var(--section-bg,linear-gradient(180deg,var(--card-hi),var(--card)));
     color:var(--section-text,var(--ink));font-family:var(--section-font,var(--font));
-    border-color:color-mix(in srgb,var(--section-accent,var(--secondary)) 28%,transparent)}
+    border-color:var(--section-border,var(--line))}
   .customer-section .eyebrow,.customer-section .muted,.customer-section .row .m{
-    color:color-mix(in srgb,var(--section-text,var(--ink)) 62%,transparent)}
+    color:var(--section-muted,var(--muted))}
   .customer-section .eyebrow::after{background:linear-gradient(to left,
-    color-mix(in srgb,var(--section-accent,var(--secondary)) 48%,transparent),transparent)}
+    var(--section-border,var(--line-hi)),transparent)}
   .customer-section .btn{background:var(--section-button-bg,var(--btn));
-    color:var(--section-button-text,var(--on-btn))}
-  .customer-section .pill{border-color:color-mix(in srgb,var(--section-accent,var(--secondary)) 35%,transparent)}
-  .member-card.customer-section{background:var(--section-bg);color:var(--section-text);
-    font-family:var(--section-font,var(--font));border-color:color-mix(in srgb,var(--section-accent) 55%,transparent)}
-  .member-card.customer-section .install-btn{background:var(--section-button-bg);
-    color:var(--section-button-text);border-color:color-mix(in srgb,var(--section-button-text) 28%,transparent)}
+    color:var(--section-button-text,var(--on-btn));border-color:var(--section-button-border,var(--section-border,var(--line)))}
+  .customer-section .pill{color:var(--section-accent,var(--secondary));
+    border-color:var(--section-border,var(--line));background:var(--section-surface,var(--field))}
+  .customer-section .row{background:var(--section-surface,var(--field));border-color:var(--section-border,var(--line))}
+  .customer-section .empty{color:var(--section-muted,var(--muted));border-color:var(--section-border,var(--line))}
+  .customer-section .track{background:var(--section-surface,var(--field))}
+  .customer-section .bal-of{color:var(--section-muted,var(--muted))}
+  .customer-section .remain{color:var(--section-accent,var(--secondary))}
+  .customer-section .stamp{color:var(--section-muted,var(--muted));
+    background:var(--section-surface,var(--field));border-color:var(--section-border,var(--line-hi))}
+  .member-card.customer-section{background:var(--section-bg,
+      linear-gradient(155deg,var(--primary),color-mix(in srgb,var(--primary) 66%,var(--secondary)),var(--primary)));
+    color:var(--section-text,var(--on-primary));font-family:var(--section-font,var(--font));
+    border-color:var(--section-border,var(--line-hi))}
+  .member-card.customer-section .install-btn{background:var(--section-button-bg,color-mix(in srgb,#fff 13%,transparent));
+    color:var(--section-button-text,var(--on-primary));border-color:var(--section-button-border,var(--section-border,var(--line-hi)))}
   .eyebrow{display:flex;align-items:center;gap:12px;margin:0 0 14px;
     font-size:12px;font-weight:600;color:var(--muted)}
   .eyebrow::after{content:"";height:1px;flex:1;
@@ -280,7 +296,9 @@
     background:
       radial-gradient(95% 55% at 50% -4%, color-mix(in srgb,var(--secondary) 13%,transparent), transparent 62%),
       linear-gradient(180deg,var(--card-hi),var(--card))}
-  .roulette.customer-section{background:var(--section-bg)}
+  .roulette.customer-section{background:var(--section-bg,
+      radial-gradient(95% 55% at 50% -4%,color-mix(in srgb,var(--secondary) 13%,transparent),transparent 62%),
+      linear-gradient(180deg,var(--card-hi),var(--card)))}
   .wheel-shell{width:min(330px,84vw);height:min(330px,84vw);margin:24px auto 10px;position:relative;
     touch-action:none;user-select:none;-webkit-user-select:none;
     filter:drop-shadow(0 28px 40px var(--shadow))}
@@ -516,7 +534,10 @@ const toHex=(r)=>"#"+r.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(1
 const mixC=(a,b,t)=>toHex(hex(a).map((v,i)=>v+(hex(b)[i]-v)*t));
 function lum(c){const [r,g,b]=hex(c).map(v=>{v/=255;return v<=.03928?v/12.92:((v+.055)/1.055)**2.4});
   return .2126*r+.7152*g+.0722*b;}
-const onColor=(c)=>lum(c)>.5?"#221912":"#ffffff";
+const contrast=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+const onColor=(c)=>contrast(c,"#FFFFFF")>=contrast(c,"#18201F")?"#FFFFFF":"#18201F";
+const readable=(candidate,background,min=4.5)=>candidate&&contrast(candidate,background)>=min
+  ? candidate : onColor(background);
 
 const DEFAULTS={color_primary:"#6F4E37",color_secondary:"#C8A97E",color_background:"#241812",color_button:"#C8A97E"};
 let brand={...DEFAULTS};
@@ -544,21 +565,56 @@ function cleanCustomerTheme(raw){
   }
   return out;
 }
+function customerThemeDefaults(){
+  const pageBg=brand.color_background;
+  const heroCandidate=contrast(brand.color_primary,pageBg)>=1.8
+    ? brand.color_primary : brand.color_secondary;
+  const heroBg=lum(heroCandidate)>.88 ? brand.color_secondary : heroCandidate;
+  const cardBg=lum(pageBg)>.48 ? mixC(pageBg,"#000000",.08) : mixC(pageBg,"#FFFFFF",.78);
+  const altCard=mixC(cardBg,brand.color_secondary,.055);
+  const rouletteBg=mixC(cardBg,brand.color_secondary,.12);
+  const buttonBg=brand.color_button;
+  return {
+    page:{background:pageBg,text:onColor(pageBg),muted:mixC(onColor(pageBg),pageBg,.34),font:"inherit"},
+    membership:{background:heroBg,text:onColor(heroBg),accent:brand.color_secondary,
+      button_background:onColor(heroBg),button_text:heroBg,font:"inherit"},
+    balance:{background:cardBg,text:onColor(cardBg),accent:brand.color_secondary,font:"inherit"},
+    roulette:{background:rouletteBg,text:onColor(rouletteBg),accent:brand.color_primary,
+      button_background:buttonBg,button_text:onColor(buttonBg),font:"inherit",
+      top_text:"لديك دورة مؤهلة من زيارتك الأخيرة — جرّب حظك.",
+      locked_text:"دورتك القادمة تُفتح بعد زيارتك المؤهلة القادمة.",
+      hint_text:"اسحب العجلة بقوة وأفلتها — أو اضغط الزر",button_label:"أدر العجلة"},
+    rewards:{background:altCard,text:onColor(altCard),accent:brand.color_secondary,font:"inherit"},
+    visits:{background:cardBg,text:onColor(cardBg),accent:brand.color_secondary,font:"inherit"}
+  };
+}
 function applyCustomerPageTheme(raw){
-  customerTheme=cleanCustomerTheme(raw);
-  const page=customerTheme.page||{}, root=document.documentElement.style;
+  const defaults=customerThemeDefaults(), saved=cleanCustomerTheme(raw);
+  customerTheme=Object.fromEntries(Object.keys(defaults).map(key=>[key,{...defaults[key],...(saved[key]||{})}]));
+  const page=customerTheme.page, root=document.documentElement.style;
   root.removeProperty("--ink");root.removeProperty("--muted");root.removeProperty("--font");
-  if(page.background) root.setProperty("--bg",page.background);
-  if(page.text) root.setProperty("--ink",page.text);
-  if(page.muted) root.setProperty("--muted",page.muted);
+  const pageText=readable(page.text,page.background);
+  root.setProperty("--bg",page.background);
+  root.setProperty("--ink",pageText);
+  root.setProperty("--muted",contrast(page.muted,page.background)>=3
+    ? page.muted : mixC(pageText,page.background,.30));
   if(page.font&&page.font!=="inherit") root.setProperty("--font",SAFE_FONTS[page.font]);
 }
 function applySectionTheme(element,key){
-  const section=customerTheme[key]||{}; if(!element) return;
+  const section=customerTheme[key]||customerThemeDefaults()[key]; if(!element) return;
   const style=element.style;
-  for(const [source,target] of [["background","--section-bg"],["text","--section-text"],
-    ["accent","--section-accent"],["button_background","--section-button-bg"],
-    ["button_text","--section-button-text"]]) if(section[source]) style.setProperty(target,section[source]);
+  const bg=section.background, text=readable(section.text,bg), accent=section.accent||brand.color_secondary;
+  const muted=section.muted&&contrast(section.muted,bg)>=3
+    ? section.muted : mixC(text,bg,.34);
+  const surface=lum(bg)>.5?mixC(bg,"#000000",.075):mixC(bg,"#FFFFFF",.10);
+  const border=mixC(bg,text,.18);
+  const buttonBg=section.button_background||brand.color_button;
+  const buttonText=readable(section.button_text||onColor(buttonBg),buttonBg);
+  for(const [target,value] of [["--section-bg",bg],["--section-text",text],
+    ["--section-muted",muted],["--section-accent",accent],["--section-surface",surface],
+    ["--section-border",border],["--section-button-bg",buttonBg],
+    ["--section-button-text",buttonText],["--section-button-border",mixC(buttonBg,buttonText,.24)]])
+    style.setProperty(target,value);
   if(section.font) style.setProperty("--section-font",SAFE_FONTS[section.font]);
 }
 
@@ -574,8 +630,8 @@ function applyBrandTheme(cafe){
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.content=brand.color_background;
   const backgroundUrl=safeHttpUrl(cafe?.background_url);
-  document.body.style.setProperty("--customer-bg-image",backgroundUrl
-    ? `linear-gradient(var(--scrim),var(--scrim)),url(${JSON.stringify(backgroundUrl)})`:"none");
+  document.body.style.setProperty("--customer-bg-photo",backgroundUrl?`url(${JSON.stringify(backgroundUrl)})`:"none");
+  document.body.style.setProperty("--customer-bg-overlay",backgroundUrl?"var(--scrim)":"transparent");
   applyCustomerPageTheme(cafe?.customer_theme);
   // كُشِفت ألوان المحل — نُزيل الحالة المحايدة فتظهر الهوية مباشرة
   r.classList.remove("pre-brand");
