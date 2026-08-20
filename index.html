@@ -226,8 +226,15 @@
     color:var(--section-muted,var(--muted))}
   .customer-section .eyebrow::after{background:linear-gradient(to left,
     var(--section-border,var(--line-hi)),transparent)}
-  .customer-section .btn{background:var(--section-button-bg,var(--btn));
-    color:var(--section-button-text,var(--on-btn));border-color:var(--section-button-border,var(--section-border,var(--line)))}
+  .customer-section .btn{background:linear-gradient(155deg,
+      color-mix(in srgb,var(--section-button-bg,var(--btn)) 82%,#fff),
+      var(--section-button-bg,var(--btn)) 54%,
+      color-mix(in srgb,var(--section-button-bg,var(--btn)) 82%,#000));
+    color:var(--section-button-text,var(--on-btn));
+    border:1.5px solid var(--section-button-border,var(--section-border,var(--line)));
+    box-shadow:0 12px 28px -12px color-mix(in srgb,var(--section-button-bg,var(--btn)) 52%,transparent),
+      inset 0 1px 0 color-mix(in srgb,#fff 40%,transparent)}
+  .customer-section .btn:disabled{opacity:.72;filter:saturate(.58);box-shadow:none}
   .customer-section .pill{color:var(--section-accent,var(--secondary));
     border-color:var(--section-border,var(--line));background:var(--section-surface,var(--field))}
   .customer-section .row{background:var(--section-surface,var(--field));border-color:var(--section-border,var(--line))}
@@ -242,7 +249,8 @@
     color:var(--section-text,var(--on-primary));font-family:var(--section-font,var(--font));
     border-color:var(--section-border,var(--line-hi))}
   .member-card.customer-section .install-btn{background:var(--section-button-bg,color-mix(in srgb,#fff 13%,transparent));
-    color:var(--section-button-text,var(--on-primary));border-color:var(--section-button-border,var(--section-border,var(--line-hi)))}
+    color:var(--section-button-text,var(--on-primary));border:1.5px solid var(--section-button-border,var(--section-border,var(--line-hi)));
+    box-shadow:0 8px 20px color-mix(in srgb,#000 18%,transparent)}
   .eyebrow{display:flex;align-items:center;gap:12px;margin:0 0 14px;
     font-size:12px;font-weight:600;color:var(--muted)}
   .eyebrow::after{content:"";height:1px;flex:1;
@@ -250,11 +258,11 @@
   .muted{color:var(--muted);line-height:2;margin:0;font-size:13px}
 
   .reveal{opacity:0;transform:translateY(18px)}
-  .in .reveal{animation:rise .7s cubic-bezier(.2,.9,.25,1) forwards}
-  .in .reveal:nth-child(2){animation-delay:.09s}
-  .in .reveal:nth-child(3){animation-delay:.18s}
-  .in .reveal:nth-child(4){animation-delay:.27s}
-  .in .reveal:nth-child(5){animation-delay:.36s}
+  .in .reveal{animation:rise .46s cubic-bezier(.2,.9,.25,1) forwards}
+  .in .reveal:nth-child(2){animation-delay:.04s}
+  .in .reveal:nth-child(3){animation-delay:.08s}
+  .in .reveal:nth-child(4){animation-delay:.12s}
+  .in .reveal:nth-child(5){animation-delay:.16s}
   @keyframes rise{to{opacity:1;transform:none}}
 
   /* ---------- الرصيد والأختام ---------- */
@@ -452,6 +460,13 @@
     border:1px solid var(--line-hi);background:var(--field);color:var(--ink);
     font:700 24px var(--font);text-align:center;letter-spacing:.35em;direction:ltr}
   .order-entry{display:flex;align-items:center;justify-content:center;text-decoration:none;margin:0 0 18px}
+  .section-nav{display:flex;gap:9px;overflow:auto;scrollbar-width:none;margin:0 0 18px;padding:2px}
+  .section-nav button{appearance:none;border:1px solid var(--line-hi);background:var(--card-hi);color:var(--ink);
+    border-radius:999px;padding:10px 14px;white-space:nowrap;font:600 13px var(--font);cursor:pointer;
+    box-shadow:0 8px 18px -14px var(--shadow)}
+  .section-nav button.rewards-link{background:var(--btn);color:var(--on-btn);border-color:transparent}
+  .section-nav .nav-count{display:inline-grid;place-items:center;min-width:21px;height:21px;padding:0 5px;
+    border-radius:999px;background:var(--on-btn);color:var(--btn);margin-inline-start:4px;font-size:11px}
 
   @media (prefers-reduced-motion:reduce){
     .member-card::after,.btn::after,.track span::after,.mc-seal svg,
@@ -686,7 +701,7 @@ async function load(){
     else if(state.requires_verification) showVerification();
     else render();
     /* لحظة الهوية: لا نخفي الشعار قبل اكتمالها */
-    const wait=Math.max(0, 1200-(performance.now()-bootT0));
+    const wait=Math.max(0, 650-(performance.now()-bootT0));
     setTimeout(()=>{
       $("#boot").classList.add("hide");
       document.body.classList.add("in");
@@ -836,7 +851,14 @@ function render(){
 
     ${cafe.car_ordering_enabled&&customerCode?`<a class="btn order-entry reveal" href="./order.html#${customerCode}">🚗 اطلب واستلم من سيارتك</a>`:""}
 
-    <section class="card customer-section reveal" data-customer-section="balance">
+    <nav class="section-nav reveal" aria-label="أقسام بطاقة الولاء">
+      <button data-scroll="balanceSection">رصيد الأكواب</button>
+      <button data-scroll="rouletteSection">روليت المكافآت</button>
+      <button class="rewards-link" data-scroll="rewardsSection">مكافآتي <span class="nav-count">${(c.rewards||[]).length}</span></button>
+      <button data-scroll="visitsSection">آخر الزيارات</button>
+    </nav>
+
+    <section class="card customer-section reveal" data-customer-section="balance" id="balanceSection">
       <p class="eyebrow">رصيد الأكواب</p>
       <div class="bal-row">
         <span class="bal-num">${bal}</span><span class="bal-of">من ${need}</span>
@@ -846,7 +868,7 @@ function render(){
       <p class="remain">${remain===0?"🎉 كوبك المجاني بانتظارك — أخبر الباريستا!":`باقٍ ${remain} ${remain==1?"كوب واحد":"أكواب"} على كوبك المجاني`}</p>
     </section>
 
-    <section class="card customer-section roulette reveal" data-customer-section="roulette">
+    <section class="card customer-section roulette reveal" data-customer-section="roulette" id="rouletteSection">
       <p class="eyebrow">روليت المكافآت</p>
       <p class="muted" id="rouletteText">${escapeHTML(rouletteTop)}</p>
       <div class="wheel-shell ${canSpin?"armed":""}" id="wheelShell">
@@ -865,13 +887,13 @@ function render(){
       <div class="result" id="spinResult"></div>
     </section>
 
-    <section class="card customer-section reveal" data-customer-section="rewards">
+    <section class="card customer-section reveal" data-customer-section="rewards" id="rewardsSection">
       <p class="eyebrow">مكافآتي</p>
       <p class="muted">اعرضها للباريستا عند زيارتك.</p>
       <div class="list">${rewards}</div>
     </section>
 
-    <section class="card customer-section reveal" data-customer-section="visits">
+    <section class="card customer-section reveal" data-customer-section="visits" id="visitsSection">
       <p class="eyebrow">آخر الزيارات</p>
       <div class="list">${visits}</div>
     </section>
@@ -885,6 +907,7 @@ function render(){
 
   $("#spinBtn").onclick=()=>{ if(canSpinNow()) startSpin(900); };
   $("#installBtn").onclick=openInstall;
+  document.querySelectorAll("[data-scroll]").forEach(button=>button.onclick=()=>document.getElementById(button.dataset.scroll)?.scrollIntoView({behavior:reduced?"auto":"smooth",block:"start"}));
   initTilt(); initDrag();
 }
 
@@ -1164,11 +1187,13 @@ function showPrize(win,label){
   if(win) confetti();
 }
 $("#prizeClose").onclick=async()=>{
+  const showRewards=$("#prizeClose").textContent.includes("مكافآتي");
   $("#prizeOverlay").classList.remove("show");
   spinning=false;
   try{
     state=await callFn("customer-me",customerRequest());
     render();
+    if(showRewards)requestAnimationFrame(()=>$("#rewardsSection")?.scrollIntoView({behavior:reduced?"auto":"smooth",block:"start"}));
   }catch(e){}
 };
 
