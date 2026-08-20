@@ -1,11 +1,13 @@
-import { adminClient, isUuid, json, normalizeCustomerCode, preflight } from "../_shared/http.ts";
+import {
+  adminClient, isUuid, json, normalizeCustomerCode, preflight, resolveCustomerSession,
+} from "../_shared/http.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return preflight(req);
   if (req.method !== "POST") return json(req, { error: "METHOD_NOT_ALLOWED" }, 405);
 
   try {
-    const { customer_code, magic_token } = await req.json();
+    const { customer_code, magic_token, customer_session } = await req.json();
     const publicCode = normalizeCustomerCode(customer_code);
     const legacyToken = isUuid(magic_token) ? magic_token : null;
     if (!publicCode && !legacyToken) return json(req, { error: "INVALID_TOKEN" }, 401);
@@ -20,12 +22,21 @@ Deno.serve(async (req) => {
     if (!customer) return json(req, { error: "INVALID_TOKEN" }, 401);
 
     const { data: cafe, error: cafeError } = await admin.from("cafes")
-      .select("name,logo_url,color_primary,color_secondary,color_background,color_button,theme,background_url,customer_theme,cups_per_reward,require_verification,is_active")
+      .select("name,logo_url,color_primary,color_secondary,color_background,color_button,theme,background_url,customer_theme,cups_per_reward,require_verification,customer_login_required,car_ordering_enabled,is_active")
       .eq("id", customer.cafe_id).maybeSingle();
     if (cafeError) throw cafeError;
     if (!cafe?.is_active) return json(req, { error: "CAFE_INACTIVE" }, 403);
 
     const { is_active: _active, ...publicCafe } = cafe;
+    const session = await resolveCustomerSession(admin, customer_session);
+    const sessionValid = session?.customerId === customer.id;
+    if (cafe.customer_login_required && !sessionValid) {
+      return json(req, {
+        requires_login: true,
+        customer: null,
+        cafe: publicCafe,
+      });
+    }
     if (cafe.require_verification && !customer.verified_at) {
       return json(req, {
         requires_verification: true,
@@ -60,13 +71,24 @@ Deno.serve(async (req) => {
       pendingSpin = visits.find((visit) => !used.has(visit.id))?.id ?? null;
     }
 
+    const rewards = rewardsResult.data ?? [];
+    let reservedRewardIds = new Set<string>();
+    if (rewards.length) {
+      const { data: reservations, error } = await admin.from("reward_reservations")
+        .select("reward_id").in("reward_id", rewards.map((reward) => reward.id))
+        .is("consumed_at", null).is("released_at", null);
+      if (error) throw error;
+      reservedRewardIds = new Set((reservations ?? []).map((item) => item.reward_id));
+    }
+
     return json(req, {
+      requires_login: false,
       requires_verification: false,
       customer: { id: customer.id, full_name: customer.full_name, verified: !!customer.verified_at },
       cafe: publicCafe,
       balance: balanceResult.data ?? 0,
       cups_per_reward: cafe.cups_per_reward ?? 10,
-      rewards: rewardsResult.data ?? [],
+      rewards: rewards.filter((reward) => !reservedRewardIds.has(reward.id)),
       visits,
       roulette_preview: prizesResult.data ?? [],
       pending_spin_visit_id: pendingSpin,

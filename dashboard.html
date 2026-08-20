@@ -23,7 +23,7 @@
   .card h3{margin:0 0 14px;font-size:16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
   label{display:block;font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted)}
-  input,select{width:100%;font-family:inherit;font-size:15px;padding:11px 12px;
+  input,select,textarea{width:100%;font-family:inherit;font-size:15px;padding:11px 12px;
     border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
   input[type=color]{height:46px;padding:4px;cursor:pointer}
   .btn{border:0;border-radius:11px;padding:13px 20px;font-family:inherit;font-weight:800;
@@ -68,6 +68,7 @@
   .theme-grid input,.theme-grid select{font-size:14px;padding:10px}
   .theme-copy{grid-column:1/-1}
   .identity-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
+  .menu-list{display:grid;gap:9px}.menu-row{display:grid;grid-template-columns:1fr 110px auto;gap:9px;align-items:center;padding:11px;border:1px solid var(--line);border-radius:12px}.menu-row small{display:block;color:var(--muted)}.inline-actions{display:flex;gap:6px}.section-note{padding:11px;border-radius:11px;background:#fff7e6;color:#765313;font-size:13px;margin:10px 0}
   @media(max-width:560px){.prize-row{grid-template-columns:1fr 1fr;}.prize-row .pct{grid-column:1/-1}}
 </style>
 </head>
@@ -91,9 +92,18 @@
     <div class="tabs">
       <button data-t="reports" class="on">التقارير</button>
       <button data-t="customers">العملاء</button>
+      <button data-t="menu">المنتجات</button>
       <button data-t="identity">الهوية والألوان</button>
       <button data-t="loyalty">إعدادات الولاء</button>
       <button data-t="roulette">الروليت</button>
+    </div>
+
+    <!-- المنتجات -->
+    <div class="panel" id="p-menu">
+      <div class="card"><h3>التصنيفات</h3><div class="grid"><div><label>اسم التصنيف</label><input id="catName" placeholder="قهوة ساخنة"></div><div><label>الترتيب</label><input id="catSort" type="number" min="0" value="0"></div></div><button class="btn sm" id="addCategory" style="margin-top:12px">إضافة تصنيف</button><div id="categoriesList" class="menu-list" style="margin-top:14px"></div></div>
+      <div class="card"><h3 id="productFormTitle">إضافة منتج</h3><input type="hidden" id="productId"><div class="grid"><div><label>التصنيف</label><select id="productCategory"><option value="">بدون تصنيف</option></select></div><div><label>اسم المنتج</label><input id="productName"></div><div><label>السعر الأساسي</label><input id="productPrice" type="number" min="0" step="0.01"></div><div><label>دقائق التحضير</label><input id="productPrep" type="number" min="0" value="10"></div><div><label>رابط الصورة</label><input id="productImage" placeholder="https://..."></div><div><label>الترتيب</label><input id="productSort" type="number" min="0" value="0"></div><div style="grid-column:1/-1"><label>الوصف</label><textarea id="productDescription" rows="2"></textarea></div><div><label>ظاهر في القائمة</label><select id="productActive"><option value="true">نعم</option><option value="false">لا</option></select></div><div><label>متاح الآن</label><select id="productAvailable"><option value="true">نعم</option><option value="false">لا</option></select></div></div><div class="row-actions"><button class="btn" id="saveProduct">حفظ المنتج</button><button class="btn ghost" id="clearProduct">منتج جديد</button></div></div>
+      <div class="card"><h3>المنتجات الحالية</h3><div id="productsList" class="menu-list"></div></div>
+      <div class="card"><h3 id="optionFormTitle">إضافات المنتج</h3><input type="hidden" id="optionId"><div class="grid"><div><label>المنتج</label><select id="optionProduct"></select></div><div><label>مجموعة الإضافة</label><input id="optionGroup" value="الإضافات"></div><div><label>اسم الإضافة</label><input id="optionName" placeholder="حليب شوفان"></div><div><label>السعر الإضافي</label><input id="optionPrice" type="number" min="0" step="0.01" value="0"></div><div><label>السماح باختيار عدة إضافات</label><select id="optionMultiple"><option value="true">نعم</option><option value="false">اختيار واحد من المجموعة</option></select></div><div><label>الترتيب</label><input id="optionSort" type="number" min="0" value="0"></div></div><div class="row-actions"><button class="btn" id="saveOption">حفظ الإضافة</button><button class="btn ghost" id="clearOption">إضافة جديدة</button></div><div id="optionsList" class="menu-list" style="margin-top:14px"></div></div>
     </div>
 
     <!-- التقارير -->
@@ -206,7 +216,11 @@
             <select id="f_approval"><option value="true">نعم</option><option value="false">لا</option></select></div>
           <div><label>فرض تحقق واتساب قبل التسجيل</label>
             <select id="f_reqverify"><option value="false">لا</option><option value="true">نعم</option></select></div>
+          <div><label>الطلب من السيارة</label><select id="f_ordering"><option value="true">مفعّل</option><option value="false">متوقف</option></select></div>
+          <div><label>دخول العميل برمز واتساب</label><select id="f_customerlogin"><option value="false">غير مفروض</option><option value="true">مطلوب</option></select></div>
+          <div><label>الحد الأدنى للطلب (ر.س)</label><input type="number" id="f_minorder" min="0" step="0.01"></div>
         </div>
+        <div class="section-note">لا تفعّل دخول واتساب قبل إضافة أسرار Meta واختبار إرسال الرمز؛ وإلا لن يستطيع العميل فتح بطاقته أو طلبه.</div>
         <button class="btn" id="saveLoyalty" style="margin-top:16px">حفظ إعدادات الولاء</button>
       </div>
     </div>
@@ -230,7 +244,7 @@
 <script type="module">
 import { sb, toast, applyBrand, escapeHTML } from "./app.js";
 const $ = s=>document.querySelector(s);
-let cafeId=null, cafe=null, prizes=[];
+let cafeId=null, cafe=null, prizes=[], menuCategories=[], menuProducts=[], menuOptions=[];
 function riyadhDate(date=new Date()){
   const parts=new Intl.DateTimeFormat("en",{timeZone:"Asia/Riyadh",year:"numeric",month:"2-digit",day:"2-digit"})
     .formatToParts(date).reduce((o,p)=>(o[p.type]=p.value,o),{});
@@ -251,6 +265,7 @@ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
   document.querySelectorAll(".panel").forEach(x=>x.classList.remove("on"));
   b.classList.add("on"); $("#p-"+b.dataset.t).classList.add("on");
+  if(b.dataset.t==="menu") loadMenu();
 });
 
 async function init(){
@@ -262,7 +277,7 @@ async function init(){
   cafeId=staff.cafe_id;
   const { data:c }=await sb.from("cafes").select("*").eq("id",cafeId).single();
   cafe=c; $("#cafeName").textContent=c.name; applyBrand(c);
-  fillIdentity(); fillLoyalty(); await loadPrizes();
+  fillIdentity(); fillLoyalty(); await Promise.all([loadPrizes(),loadMenu()]);
   // فترة افتراضية: آخر 30 يوم
   const to=new Date(), from=new Date(Date.now()-30*864e5);
   $("#rTo").value=riyadhDate(to);
@@ -378,17 +393,62 @@ function fillLoyalty(){
   $("#f_daily").value=cafe.daily_cup_limit||""; $("#f_valid").value=cafe.reward_valid_days;
   $("#f_approval").value=String(cafe.free_cup_needs_staff_approval);
   $("#f_reqverify").value=String(cafe.require_verification||false);
+  $("#f_ordering").value=String(cafe.car_ordering_enabled!==false);
+  $("#f_customerlogin").value=String(cafe.customer_login_required||false);
+  $("#f_minorder").value=cafe.order_min_total||0;
 }
 $("#saveLoyalty").onclick=async()=>{
   const patch={cups_per_reward:+$("#f_need").value||10,count_mode:$("#f_mode").value,
     daily_cup_limit:$("#f_daily").value?+$("#f_daily").value:null,
     reward_valid_days:+$("#f_valid").value||30,
     free_cup_needs_staff_approval:$("#f_approval").value==="true",
-    require_verification:$("#f_reqverify").value==="true"};
+    require_verification:$("#f_reqverify").value==="true",
+    car_ordering_enabled:$("#f_ordering").value==="true",
+    customer_login_required:$("#f_customerlogin").value==="true",
+    order_min_total:Math.max(0,+$("#f_minorder").value||0)};
   const { error }=await sb.from("cafes").update(patch).eq("id",cafeId);
   if(error) return toast("تعذّر الحفظ",true);
   Object.assign(cafe,patch); toast("تم حفظ إعدادات الولاء");
 };
+
+/* قائمة المنتجات */
+async function loadMenu(){
+  if(!cafeId)return;
+  const [cats,products,options]=await Promise.all([
+    sb.from("product_categories").select("*").eq("cafe_id",cafeId).order("sort_order"),
+    sb.from("products").select("*").eq("cafe_id",cafeId).order("sort_order"),
+    sb.from("product_options").select("*").eq("cafe_id",cafeId).order("sort_order")
+  ]);
+  if(cats.error||products.error||options.error)return;
+  menuCategories=cats.data||[];menuProducts=products.data||[];menuOptions=options.data||[];renderMenuAdmin();
+}
+function renderMenuAdmin(){
+  const categoryOptions=`<option value="">بدون تصنيف</option>`+menuCategories.map(c=>`<option value="${c.id}">${escapeHTML(c.name)}</option>`).join("");
+  $("#productCategory").innerHTML=categoryOptions;
+  $("#optionProduct").innerHTML=menuProducts.map(p=>`<option value="${p.id}">${escapeHTML(p.name)}</option>`).join("");
+  $("#categoriesList").innerHTML=menuCategories.map(c=>`<div class="menu-row"><div><b>${escapeHTML(c.name)}</b><small>ترتيب ${c.sort_order} • ${c.is_active?"ظاهر":"مخفي"}</small></div><span></span><div class="inline-actions"><button class="btn ghost sm" data-edit-cat="${c.id}">تعديل</button><button class="btn del sm" data-del-cat="${c.id}">حذف</button></div></div>`).join("")||'<p class="theme-intro">لا تصنيفات بعد.</p>';
+  $("#productsList").innerHTML=menuProducts.map(p=>`<div class="menu-row"><div><b>${escapeHTML(p.name)}</b><small>${Number(p.base_price).toFixed(2)} ر.س • ${p.is_available?"متاح":"غير متاح"}</small></div><span>${escapeHTML(menuCategories.find(c=>c.id===p.category_id)?.name||"—")}</span><div class="inline-actions"><button class="btn ghost sm" data-edit-product="${p.id}">تعديل</button><button class="btn del sm" data-del-product="${p.id}">حذف</button></div></div>`).join("")||'<p class="theme-intro">لا منتجات بعد.</p>';
+  $("#optionsList").innerHTML=menuOptions.map(o=>`<div class="menu-row"><div><b>${escapeHTML(o.name)}</b><small>${escapeHTML(o.group_name)} • +${Number(o.price_delta).toFixed(2)} ر.س</small></div><span>${escapeHTML(menuProducts.find(p=>p.id===o.product_id)?.name||"—")}</span><div class="inline-actions"><button class="btn ghost sm" data-edit-option="${o.id}">تعديل</button><button class="btn del sm" data-del-option="${o.id}">حذف</button></div></div>`).join("")||'<p class="theme-intro">لا إضافات بعد.</p>';
+  bindMenuActions();
+}
+function bindMenuActions(){
+  document.querySelectorAll("[data-edit-cat]").forEach(b=>b.onclick=async()=>{const c=menuCategories.find(x=>x.id===b.dataset.editCat),name=prompt("اسم التصنيف",c.name);if(!name?.trim())return;const sort=prompt("الترتيب",c.sort_order);const {error}=await sb.from("product_categories").update({name:name.trim(),sort_order:Math.max(0,+sort||0)}).eq("id",c.id);if(error)return toast("تعذر التعديل",true);loadMenu()});
+  document.querySelectorAll("[data-del-cat]").forEach(b=>b.onclick=()=>deleteMenuRow("product_categories",b.dataset.delCat,"التصنيف"));
+  document.querySelectorAll("[data-edit-product]").forEach(b=>b.onclick=()=>fillProduct(menuProducts.find(x=>x.id===b.dataset.editProduct)));
+  document.querySelectorAll("[data-del-product]").forEach(b=>b.onclick=()=>deleteMenuRow("products",b.dataset.delProduct,"المنتج"));
+  document.querySelectorAll("[data-edit-option]").forEach(b=>b.onclick=()=>fillOption(menuOptions.find(x=>x.id===b.dataset.editOption)));
+  document.querySelectorAll("[data-del-option]").forEach(b=>b.onclick=()=>deleteMenuRow("product_options",b.dataset.delOption,"الإضافة"));
+}
+async function deleteMenuRow(table,id,label){if(!confirm(`حذف ${label}؟`))return;const {error}=await sb.from(table).delete().eq("id",id);if(error)return toast(label==="التصنيف"?"انقل المنتجات من التصنيف أولًا":"تعذر الحذف",true);toast("تم الحذف");loadMenu()}
+$("#addCategory").onclick=async()=>{const name=$("#catName").value.trim();if(!name)return toast("أدخل اسم التصنيف",true);const {error}=await sb.from("product_categories").insert({cafe_id:cafeId,name,sort_order:Math.max(0,+$("#catSort").value||0)});if(error)return toast("تعذرت الإضافة",true);$("#catName").value="";toast("تمت إضافة التصنيف");loadMenu()};
+function clearProduct(){for(const id of ["productId","productName","productImage","productDescription"])$("#"+id).value="";$("#productPrice").value="";$("#productPrep").value=10;$("#productSort").value=0;$("#productActive").value="true";$("#productAvailable").value="true";$("#productFormTitle").textContent="إضافة منتج"}
+function fillProduct(p){$("#productId").value=p.id;$("#productCategory").value=p.category_id||"";$("#productName").value=p.name;$("#productPrice").value=p.base_price;$("#productPrep").value=p.preparation_minutes;$("#productImage").value=p.image_url||"";$("#productSort").value=p.sort_order;$("#productDescription").value=p.description||"";$("#productActive").value=String(p.is_active);$("#productAvailable").value=String(p.is_available);$("#productFormTitle").textContent="تعديل المنتج";scrollTo({top:$("#p-menu").offsetTop,behavior:"smooth"})}
+$("#clearProduct").onclick=clearProduct;
+$("#saveProduct").onclick=async()=>{const id=$("#productId").value,patch={cafe_id:cafeId,category_id:$("#productCategory").value||null,name:$("#productName").value.trim(),description:$("#productDescription").value.trim()||null,image_url:$("#productImage").value.trim()||null,base_price:Math.max(0,+$("#productPrice").value||0),preparation_minutes:Math.max(0,+$("#productPrep").value||0),sort_order:Math.max(0,+$("#productSort").value||0),is_active:$("#productActive").value==="true",is_available:$("#productAvailable").value==="true"};if(!patch.name)return toast("أدخل اسم المنتج",true);const result=id?await sb.from("products").update(patch).eq("id",id):await sb.from("products").insert(patch);if(result.error)return toast("تعذر حفظ المنتج",true);toast("تم حفظ المنتج");clearProduct();loadMenu()};
+function clearOption(){$("#optionId").value="";$("#optionName").value="";$("#optionGroup").value="الإضافات";$("#optionPrice").value=0;$("#optionSort").value=0;$("#optionMultiple").value="true";$("#optionFormTitle").textContent="إضافات المنتج"}
+function fillOption(o){$("#optionId").value=o.id;$("#optionProduct").value=o.product_id;$("#optionName").value=o.name;$("#optionGroup").value=o.group_name;$("#optionPrice").value=o.price_delta;$("#optionSort").value=o.sort_order;$("#optionMultiple").value=String(o.is_multiple);$("#optionFormTitle").textContent="تعديل الإضافة"}
+$("#clearOption").onclick=clearOption;
+$("#saveOption").onclick=async()=>{const id=$("#optionId").value,patch={cafe_id:cafeId,product_id:$("#optionProduct").value,group_name:$("#optionGroup").value.trim()||"الإضافات",name:$("#optionName").value.trim(),price_delta:Math.max(0,+$("#optionPrice").value||0),is_multiple:$("#optionMultiple").value==="true",sort_order:Math.max(0,+$("#optionSort").value||0),is_active:true};if(!patch.product_id||!patch.name)return toast("اختر المنتج وأدخل اسم الإضافة",true);const result=id?await sb.from("product_options").update(patch).eq("id",id):await sb.from("product_options").insert(patch);if(result.error)return toast("تعذر حفظ الإضافة",true);toast("تم حفظ الإضافة");clearOption();loadMenu()};
 
 /* الروليت */
 async function loadPrizes(){
@@ -433,14 +493,14 @@ $("#savePrizes").onclick=async()=>{
 
 /* التقارير */
 $("#runReport").onclick=runReport;
-let lastReport=null;
+let lastReport=null,lastOrderReport=null;
 async function runReport(){
   const from=new Date($("#rFrom").value+"T00:00:00+03:00");
   const to=new Date($("#rTo").value+"T23:59:59.999+03:00");
-  const { data,error }=await sb.rpc("report_overview",
-    {p_cafe:cafeId,p_from:from.toISOString(),p_to:to.toISOString()});
-  if(error) return toast("تعذّر جلب التقرير",true);
-  lastReport=data; renderReport(data);
+  const params={p_cafe:cafeId,p_from:from.toISOString(),p_to:to.toISOString()};
+  const [loyalty,orders]=await Promise.all([sb.rpc("report_overview",params),sb.rpc("order_report_overview",params)]);
+  if(loyalty.error||orders.error) return toast("تعذّر جلب التقرير",true);
+  lastReport=loyalty.data;lastOrderReport=orders.data;renderReport(loyalty.data,orders.data);
 }
 
 /* نطاقات سريعة */
@@ -503,6 +563,7 @@ $("#exportReport").onclick=()=>{
   rows.push([]);
   rows.push(["الجوائز الأكثر استخدامًا",""]); rows.push(["الجائزة","مرات الاستخدام"]);
   (d.top_rewards||[]).forEach(x=>rows.push([x.label,x.used]));
+  if(lastOrderReport){const o=lastOrderReport;rows.push([]);rows.push(["طلبات السيارة",""]);rows.push(["الطلبات",o.totals.orders]);rows.push(["المكتملة",o.totals.completed]);rows.push(["الملغاة/لم يحضر",o.totals.cancelled]);rows.push(["الإيراد",o.totals.revenue]);rows.push([]);rows.push(["المنتجات","الكمية","الإيراد"]);(o.products||[]).forEach(p=>rows.push([p.name,p.quantity,p.revenue]));}
   downloadCSV(`تقرير-${cafe.name}-${$("#rFrom").value}_${$("#rTo").value}.csv`,rows);
   toast("تم تصدير التقرير");
 };
@@ -564,8 +625,9 @@ function bars(items,labelKey,valKey,mapLabel){
     <div class="bar"><span style="width:${x[valKey]/max*100}%"></span></div>
     <div class="v">${x[valKey]}</div></div>`).join("")||`<p style="color:var(--muted)">لا بيانات</p>`;
 }
-function renderReport(d){
+function renderReport(d,orders){
   const t=d.totals, ri=d.roulette_impact||{};
+  const ot=orders?.totals||{};
   $("#reportBody").innerHTML=`
     <div class="card"><div class="grid">
       <div class="stat"><div class="n">${t.customers}</div><div class="l">إجمالي العملاء</div></div>
@@ -575,6 +637,17 @@ function renderReport(d){
       <div class="stat"><div class="n">${t.cups}</div><div class="l">الأكواب</div></div>
       <div class="stat"><div class="n">${t.avg_cups_per_visit}</div><div class="l">متوسط الأكواب/زيارة</div></div>
     </div></div>
+
+    <div class="card"><h3>طلبات السيارة</h3><div class="grid">
+      <div class="stat"><div class="n">${ot.orders||0}</div><div class="l">إجمالي الطلبات</div></div>
+      <div class="stat"><div class="n">${ot.completed||0}</div><div class="l">طلبات مكتملة</div></div>
+      <div class="stat"><div class="n">${ot.cancelled||0}</div><div class="l">ملغي / لم يحضر</div></div>
+      <div class="stat"><div class="n">${Number(ot.revenue||0).toFixed(2)}</div><div class="l">الإيراد (ر.س)</div></div>
+      <div class="stat"><div class="n">${ot.avg_prep_minutes||0}</div><div class="l">متوسط التحضير (دقيقة)</div></div>
+      <div class="stat"><div class="n">${ot.avg_arrival_wait_minutes||0}</div><div class="l">انتظار العميل بعد الوصول</div></div>
+    </div></div>
+
+    <div class="card"><h3>الطلبات لكل منتج</h3><table><thead><tr><th>المنتج</th><th>الكمية</th><th>الإيراد</th></tr></thead><tbody>${(orders?.products||[]).map(p=>`<tr><td>${escapeHTML(p.name)}</td><td>${p.quantity}</td><td>${Number(p.revenue).toFixed(2)} ر.س</td></tr>`).join("")||'<tr><td colspan="3" style="color:var(--muted)">لا توجد طلبات مكتملة في الفترة.</td></tr>'}</tbody></table></div>
 
     <div class="grid">
       <div class="card"><h3>الزيارات حسب اليوم</h3>${bars(d.by_weekday,"day","visits",x=>WD[x])}</div>

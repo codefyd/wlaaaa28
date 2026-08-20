@@ -9,6 +9,8 @@ const tests = [
   }, 401],
   ["verify-code", { customer_code: "ABCDEFGH", code: "000000" }, 401],
   ["customer-upsert", { cafe_id: "bad", phone: "0500000000" }, 401],
+  ["customer-auth", { action: "request", customer_code: "bad" }, 400],
+  ["order-api", { action: "bootstrap", customer_code: "bad" }, 400],
 ];
 
 let failed = false;

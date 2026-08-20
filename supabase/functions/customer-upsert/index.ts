@@ -1,13 +1,4 @@
-import { adminClient, isUuid, json, preflight, sha256 } from "../_shared/http.ts";
-
-function normalizePhone(raw: unknown) {
-  let phone = String(raw ?? "").replace(/[^\d+]/g, "");
-  if (phone.startsWith("+")) phone = phone.slice(1);
-  if (phone.startsWith("00")) phone = phone.slice(2);
-  if (phone.startsWith("05")) phone = `966${phone.slice(1)}`;
-  if (phone.startsWith("5") && phone.length === 9) phone = `966${phone}`;
-  return /^\d{10,15}$/.test(phone) ? phone : null;
-}
+import { adminClient, isUuid, json, normalizePhone, preflight, sha256 } from "../_shared/http.ts";
 
 function createCode() {
   return String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
@@ -17,6 +8,21 @@ const CUSTOMER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function createCustomerCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(8));
   return Array.from(bytes, (byte) => CUSTOMER_CODE_ALPHABET[byte & 31]).join("");
+}
+
+async function unreservedRewards(admin: ReturnType<typeof adminClient>, customerId: string) {
+  const { data: rewards, error } = await admin.from("rewards").select("id,label")
+    .eq("customer_id", customerId).eq("status", "available")
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+  if (error) throw error;
+  if (!rewards?.length) return [];
+  const { data: reservations, error: reservationsError } = await admin
+    .from("reward_reservations").select("reward_id")
+    .in("reward_id", rewards.map((reward) => reward.id))
+    .is("consumed_at", null).is("released_at", null);
+  if (reservationsError) throw reservationsError;
+  const reserved = new Set((reservations ?? []).map((row) => row.reward_id));
+  return rewards.filter((reward) => !reserved.has(reward.id));
 }
 
 function clientLink(req: Request, requestedBase: unknown, publicCode: string) {
@@ -72,15 +78,12 @@ Deno.serve(async (req) => {
 
     if (payload.search_only) {
       if (!customer) return json(req, { found: false });
-      const { data: rewards, error } = await admin.from("rewards").select("id,label")
-        .eq("customer_id", customer.id).eq("status", "available")
-        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
-      if (error) throw error;
+      const rewards = await unreservedRewards(admin, customer.id);
       return json(req, {
         found: true,
         customer_id: customer.id,
         full_name: customer.full_name,
-        rewards: rewards ?? [],
+        rewards,
       });
     }
 
@@ -157,10 +160,7 @@ Deno.serve(async (req) => {
       "نتمنى لك يومًا جميلًا 🤎",
     ].filter(Boolean).join("\n\n");
     const encodedMessage = encodeURIComponent(message);
-    const { data: rewards, error: rewardsError } = await admin.from("rewards")
-      .select("id,label").eq("customer_id", customer.id).eq("status", "available")
-      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
-    if (rewardsError) throw rewardsError;
+    const rewards = await unreservedRewards(admin, customer.id);
 
     return json(req, {
       customer_id: customer.id,
@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
       is_new: isNewCustomer,
       verified: !!customer.verified_at,
       customer_code: customer.public_code,
-      rewards: rewards ?? [],
+      rewards,
       wa_link: `https://wa.me/${phone}?text=${encodedMessage}`,
       wa_web_link: `https://web.whatsapp.com/send?phone=${phone}&text=${encodedMessage}`,
       client_link: shortLink,

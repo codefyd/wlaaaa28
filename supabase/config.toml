@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.verify-code]
 verify_jwt = false
+
+[functions.customer-auth]
+verify_jwt = false
+
+[functions.order-api]
+verify_jwt = false

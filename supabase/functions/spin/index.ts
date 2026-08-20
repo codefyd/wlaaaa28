@@ -1,11 +1,13 @@
-import { adminClient, isUuid, json, normalizeCustomerCode, preflight } from "../_shared/http.ts";
+import {
+  adminClient, isUuid, json, normalizeCustomerCode, preflight, resolveCustomerSession,
+} from "../_shared/http.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return preflight(req);
   if (req.method !== "POST") return json(req, { error: "METHOD_NOT_ALLOWED" }, 405);
 
   try {
-    const { customer_code, magic_token, visit_id } = await req.json();
+    const { customer_code, magic_token, customer_session, visit_id } = await req.json();
     const publicCode = normalizeCustomerCode(customer_code);
     const legacyToken = isUuid(magic_token) ? magic_token : null;
     if ((!publicCode && !legacyToken) || !isUuid(visit_id)) {
@@ -13,14 +15,22 @@ Deno.serve(async (req) => {
     }
 
     const admin = adminClient();
-    let resolvedMagicToken = legacyToken;
-    if (publicCode) {
-      const { data: customer, error: customerError } = await admin.from("customers")
-        .select("magic_token").eq("public_code", publicCode).maybeSingle();
-      if (customerError) throw customerError;
-      if (!customer) return json(req, { error: "INVALID_TOKEN" }, 401);
-      resolvedMagicToken = customer.magic_token;
+    let customerQuery = admin.from("customers")
+      .select("id,magic_token,cafe_id,cafes!inner(customer_login_required)");
+    customerQuery = publicCode
+      ? customerQuery.eq("public_code", publicCode)
+      : customerQuery.eq("magic_token", legacyToken!);
+    const { data: customer, error: customerError } = await customerQuery.maybeSingle();
+    if (customerError) throw customerError;
+    if (!customer) return json(req, { error: "INVALID_TOKEN" }, 401);
+    const cafe = Array.isArray(customer.cafes) ? customer.cafes[0] : customer.cafes;
+    if (cafe?.customer_login_required) {
+      const session = await resolveCustomerSession(admin, customer_session);
+      if (session?.customerId !== customer.id) {
+        return json(req, { error: "LOGIN_REQUIRED" }, 401);
+      }
     }
+    const resolvedMagicToken = customer.magic_token;
 
     const random = crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
     const { data, error } = await admin.rpc("spin_roulette", {

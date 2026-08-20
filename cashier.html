@@ -11,7 +11,7 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;font-family:Tajawal,system-ui,sans-serif;background:var(--bg);color:var(--ink);
     min-height:100dvh}
-  .wrap{max-width:520px;margin:0 auto;padding:20px 18px 40px}
+  .wrap{max-width:900px;margin:0 auto;padding:20px 18px 40px}
   .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
   .head h1{font-size:19px;margin:0;font-weight:800}
   .head .out{font-size:13px;color:var(--muted);background:none;border:0;cursor:pointer;font-family:inherit}
@@ -55,6 +55,9 @@
     background:#111;color:#fff;padding:12px 18px;border-radius:12px;font-size:14px;
     transition:.3s;z-index:99}.toast.show{transform:translateX(-50%) translateY(0)}.toast.err{background:#8c2f2f}
   .login{max-width:360px;margin:60px auto 0}
+  .tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px}.tab{border:1px solid var(--line);background:#fff;color:var(--primary);border-radius:13px;padding:12px;font:800 14px inherit;cursor:pointer}.tab.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .loyalty-panel{max-width:520px;margin:auto}.orders-panel{display:none}.orders-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.orders-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.order-card{padding:16px}.order-card.arrived{border:2px solid var(--ok);box-shadow:0 0 0 4px #2f7d4f18}.order-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.order-num{font-size:13px;color:var(--muted)}.status{border-radius:99px;padding:6px 10px;font-size:12px;font-weight:800;background:#f3eee8}.plate{font-family:system-ui,sans-serif;font-size:24px;letter-spacing:.13em;font-weight:900;text-align:center;border:2px solid #222;border-radius:8px;padding:7px;margin:12px 0;direction:ltr}.customer-line{font-size:14px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}.arrival-note{background:#e9f7f0;color:#176b49;border-radius:11px;padding:9px;margin:10px 0;font-weight:800}.items{margin:10px 0;border-top:1px solid var(--line)}.item{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px}.order-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.order-actions .btn{margin:0;padding:10px;font-size:13px}.order-actions .full{grid-column:1/-1}.empty-orders{text-align:center;color:var(--muted);padding:40px}.live{display:inline-flex;align-items:center;gap:6px;color:var(--ok);font-size:13px}.live:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px #2f7d4f20}
+  @media(max-width:680px){.orders-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -76,10 +79,11 @@
   <!-- شاشة العمل -->
   <div id="workView" style="display:none">
     <div class="head">
-      <h1>إضافة أكواب</h1>
+      <h1>نظام الكاشير</h1>
       <button class="out" id="logoutBtn">خروج</button>
     </div>
-    <div class="card">
+    <div class="tabs"><button class="tab active" data-panel="loyaltyPanel">الولاء</button><button class="tab" data-panel="ordersPanel">طلبات السيارة</button></div>
+    <div id="loyaltyPanel" class="loyalty-panel"><div class="card">
       <label>رقم جوال العميل</label>
       <div class="phone-row">
         <input id="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="05xxxxxxxx" />
@@ -101,9 +105,6 @@
           <button id="plus" type="button">+</button>
         </div>
 
-        <label>الفرع</label>
-        <select id="branch"><option value="">— بدون تحديد —</option></select>
-
         <label>ملاحظة (اختياري)</label>
         <input id="note" type="text" placeholder="" />
 
@@ -116,15 +117,19 @@
         📲 إرسال رابط العميل عبر واتساب</button>
 
       <div id="rewardBox"></div>
-    </div>
+    </div></div>
+    <section id="ordersPanel" class="orders-panel">
+      <div class="orders-head"><div><b>طلبات السيارة</b><div class="live">تحديث مباشر</div></div><button class="tab" id="refreshOrders">تحديث</button></div>
+      <div class="orders-grid" id="ordersGrid"><div class="card empty-orders">جاري تحميل الطلبات…</div></div>
+    </section>
   </div>
 </div>
 
 <script type="module">
-import { sb, callFn, toast, applyBrand } from "./app.js";
+import { sb, callFn, toast, applyBrand, escapeHTML } from "./app.js";
 
 const $ = s => document.querySelector(s);
-let cafeId = null, currentCustomer = null;
+let cafeId = null, currentCustomer = null, orderChannel = null, knownOrders = new Map(), orderPoll = null, audioCtx = null;
 
 // جلسة
 const { data: sess } = await sb.auth.getSession();
@@ -155,12 +160,18 @@ async function initWork(){
   const { data: cafe } = await sb.from("cafes")
     .select("color_primary,color_secondary,color_button").eq("id",cafeId).maybeSingle();
   applyBrand(cafe);
-  // الفروع
-  const { data: branches } = await sb.from("branches")
-    .select("id,name").eq("cafe_id",cafeId).eq("is_active",true);
-  const sel=$("#branch");
-  (branches||[]).forEach(b=>{const o=document.createElement("option");o.value=b.id;o.textContent=b.name;sel.appendChild(o);});
+  await loadOrders();
+  subscribeOrders();
+  clearInterval(orderPoll);orderPoll=setInterval(loadOrders,10000);
 }
+
+document.querySelectorAll(".tab[data-panel]").forEach(button=>button.onclick=()=>{
+  document.querySelectorAll(".tab[data-panel]").forEach(item=>item.classList.toggle("active",item===button));
+  $("#loyaltyPanel").style.display=button.dataset.panel==="loyaltyPanel"?"block":"none";
+  $("#ordersPanel").style.display=button.dataset.panel==="ordersPanel"?"block":"none";
+  if(button.dataset.panel==="ordersPanel"){ensureAudio();loadOrders();}
+});
+$("#refreshOrders").onclick=loadOrders;
 
 function resetCustomer(){
   currentCustomer=null;
@@ -237,7 +248,7 @@ $("#submitBtn").onclick = async () => {
     // العميل جُهّز مسبقًا؛ هنا نسجّل الزيارة فقط.
     const res = await sb.rpc("add_visit",{
       p_customer: currentCustomer.customer_id, p_cups: cups,
-      p_branch: $("#branch").value||null, p_note: $("#note").value.trim()||null });
+      p_branch: null, p_note: $("#note").value.trim()||null });
     if(res.error) throw res.error;
     const d = res.data;
 
@@ -289,9 +300,59 @@ function renderRewards(rewards){
 
 // جلب المكافآت من القاعدة ثم عرضها (بعد اعتماد العملية)
 async function loadRewards(customerId){
-  const { data: rewards } = await sb.from("rewards")
-    .select("id,label").eq("customer_id",customerId).eq("status","available");
-  renderRewards(rewards||[]);
+  try{
+    const customer=await callFn("customer-upsert",{
+      cafe_id:cafeId,phone:$("#phone").value.trim(),search_only:true
+    },true);
+    renderRewards(customer.found?customer.rewards:[]);
+  }catch{ renderRewards([]); }
+}
+
+const statusLabel={pending:"طلب جديد",accepted:"مقبول",preparing:"قيد التحضير",ready:"جاهز",completed:"مكتمل",cancelled:"ملغي",no_show:"لم يحضر"};
+function ensureAudio(){try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)()}catch{}}
+function notifyOrder(){navigator.vibrate?.([80,40,100]);if(!audioCtx)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=720;g.gain.setValueAtTime(.08,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+.3);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+.3)}
+function subscribeOrders(){
+  if(orderChannel) sb.removeChannel(orderChannel);
+  orderChannel=sb.channel(`car-orders-${cafeId}`).on("postgres_changes",{
+    event:"*",schema:"public",table:"orders",filter:`cafe_id=eq.${cafeId}`
+  },payload=>{const before=knownOrders.get(payload.new?.id);if(payload.eventType==="INSERT"||(!before?.arrived_at&&payload.new?.arrived_at))notifyOrder();loadOrders();}).subscribe();
+}
+async function loadOrders(){
+  if(!cafeId)return;
+  const {data:orders,error}=await sb.from("orders").select(`
+    id,order_number,status,payment_status,subtotal,discount_total,total,vehicle_plate,vehicle_color,
+    vehicle_model,parking_spot,note,arrived_at,created_at,updated_at,
+    customers(full_name,phone),
+    order_items(id,product_name,quantity,line_total,reward_applied,order_item_options(option_name,price_delta))
+  `).eq("cafe_id",cafeId).in("status",["pending","accepted","preparing","ready"])
+    .order("arrived_at",{ascending:false,nullsFirst:false}).order("created_at",{ascending:true});
+  if(error){$("#ordersGrid").innerHTML='<div class="card empty-orders">تعذر تحميل الطلبات.</div>';return}
+  knownOrders=new Map((orders||[]).map(order=>[order.id,order]));renderOrders(orders||[]);
+}
+function renderOrders(orders){
+  const grid=$("#ordersGrid");
+  if(!orders.length){grid.innerHTML='<div class="card empty-orders" style="grid-column:1/-1">لا توجد طلبات قائمة الآن.</div>';return}
+  grid.innerHTML=orders.map(orderCard).join("");
+  grid.querySelectorAll("[data-order-action]").forEach(button=>button.onclick=()=>updateOrder(button.dataset.order,button.dataset.orderAction,button));
+}
+function orderCard(o){
+  const customer=Array.isArray(o.customers)?o.customers[0]:o.customers;
+  const actions=o.status==="pending"?[["accepted","قبول"],["cancelled","إلغاء"]]
+    :o.status==="accepted"?[["preparing","بدء التحضير"],["ready","جاهز"],["cancelled","إلغاء"]]
+    :o.status==="preparing"?[["ready","جاهز"],["cancelled","إلغاء"]]
+    :[["complete","تسليم وتحصيل"],["no_show","لم يحضر"]];
+  return `<article class="card order-card ${o.arrived_at?"arrived":""}"><div class="order-top"><div><b>طلب #${o.order_number}</b><div class="order-num">${new Date(o.created_at).toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit"})}</div></div><span class="status">${statusLabel[o.status]}</span></div><div class="plate">${escapeHTML(o.vehicle_plate)}</div><div class="customer-line"><span>${escapeHTML(customer?.full_name||"عميل")}</span><span dir="ltr">${escapeHTML(customer?.phone||"")}</span></div><div class="customer-line"><span>${escapeHTML(o.vehicle_color||"")} ${escapeHTML(o.vehicle_model||"")}</span><b>${Number(o.total||0).toFixed(2)} ر.س</b></div>${o.arrived_at?`<div class="arrival-note">🚗 العميل وصل${o.parking_spot?` — ${escapeHTML(o.parking_spot)}`:""}</div>`:""}${o.note?`<div class="arrival-note" style="background:#fff8e8;color:#755516">ملاحظة: ${escapeHTML(o.note)}</div>`:""}<div class="items">${(o.order_items||[]).map(i=>`<div class="item"><span>${i.quantity} × ${escapeHTML(i.product_name)}${i.reward_applied?" 🎁":""}<small class="muted">${(i.order_item_options||[]).map(x=>escapeHTML(x.option_name)).join("، ")}</small></span><b>${Number(i.line_total).toFixed(2)}</b></div>`).join("")}</div><div class="order-actions">${actions.map(([action,label],index)=>`<button class="btn ${action==="cancelled"||action==="no_show"?"ghost":""} ${action==="complete"?"full":""}" data-order="${o.id}" data-order-action="${action}">${label}</button>`).join("")}</div></article>`;
+}
+async function updateOrder(orderId,action,button){
+  if((action==="cancelled"||action==="no_show")&&!confirm("تأكيد هذا الإجراء؟"))return;
+  button.disabled=true;
+  try{
+    const {data,error}=action==="complete"
+      ?await sb.rpc("complete_car_order",{p_order:orderId})
+      :await sb.rpc("staff_update_car_order",{p_order:orderId,p_status:action});
+    if(error)throw error;
+    toast(action==="complete"?"تم التسليم وتسجيل الولاء":"تم تحديث الطلب");await loadOrders();
+  }catch(e){toast("تعذر تحديث الطلب",true);button.disabled=false;}
 }
 </script>
 </body>

@@ -5,6 +5,7 @@
 ## الواجهات
 
 - `index.html`: بطاقة العميل والمكافآت والروليت.
+- `order.html`: قائمة الطلب من السيارة والسلة وتتبع الطلب.
 - `cashier.html`: تسجيل الزيارات واستبدال المكافآت.
 - `dashboard.html`: إعدادات المقهى والعملاء والتقارير.
 - `reset-password.html`: طلب استعادة كلمة المرور وتعيين كلمة جديدة.
@@ -40,6 +41,8 @@ supabase functions deploy customer-me --no-verify-jwt
 supabase functions deploy customer-upsert --no-verify-jwt
 supabase functions deploy spin --no-verify-jwt
 supabase functions deploy verify-code --no-verify-jwt
+supabase functions deploy customer-auth --no-verify-jwt
+supabase functions deploy order-api --no-verify-jwt
 ```
 
 تعطيل فحص JWT على بوابة Edge مقصود هنا: الدوال العامة تتحقق من مدخلاتها، و`customer-upsert` يتحقق من جلسة الموظف داخل الدالة. لا تغيّر هذا السلوك من دون تحديث آلية المصادقة.
@@ -53,6 +56,26 @@ deno check supabase/functions/customer-me/index.ts
 deno check supabase/functions/customer-upsert/index.ts
 deno check supabase/functions/spin/index.ts
 deno check supabase/functions/verify-code/index.ts
+deno check supabase/functions/customer-auth/index.ts
+deno check supabase/functions/order-api/index.ts
 ```
 
 يجب تشغيل المهاجرات أولًا قبل نشر نسخة واجهة تعتمد على وظائف التحقق والروليت الذرية.
+## الطلب من السيارة وواتساب
+
+يدعم النظام قائمة منتجات وسلة وبيانات السيارة وإشعار الوصول وتتبع الحالة والدفع
+عند الاستلام. يُضاف رصيد ولاء واحد لكل طلب مدفوع ومكتمل، وتُحجز مكافأة الكوب
+المجاني عند إنشاء الطلب ثم تُستهلك عند التسليم أو تُحرر عند الإلغاء.
+
+تُضاف القيم التالية في **Supabase Dashboard → Edge Functions → Secrets** فقط،
+ولا يوضع رمز الوصول الدائم في المستودع:
+
+- `META_WHATSAPP_TOKEN`: رمز وصول Meta الدائم.
+- `META_PHONE_NUMBER_ID`: معرّف رقم الهاتف المرسل.
+- `META_WABA_ID`: معرّف حساب واتساب للأعمال (للإدارة).
+- `META_TEMPLATE_NAME`: حاليًا `alhsan_job_application_confirm`.
+- `META_TEMPLATE_LANGUAGE`: حاليًا `ar`.
+- `META_GRAPH_VERSION`: اختياري؛ القيمة الافتراضية `v25.0`.
+
+يجب أن يستقبل المتغير الأول في نص القالب رمز الدخول المكوّن من ستة أرقام. لا
+يحتاج هذا التدفق إلى Webhook أو استقبال الردود.
