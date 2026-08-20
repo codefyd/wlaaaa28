@@ -10,7 +10,15 @@ const tests = [
   ["verify-code", { customer_code: "ABCDEFGH", code: "000000" }, 401],
   ["customer-upsert", { cafe_id: "bad", phone: "0500000000" }, 401],
   ["customer-auth", { action: "request", customer_code: "bad" }, 400],
+  ["customer-auth", { action: "request", cafe_code: "WHR73PVD", phone: "bad" }, 400],
+  ["customer-auth", {
+    action: "verify",
+    cafe_code: "WHR73PVD",
+    challenge_id: "00000000-0000-4000-8000-000000000000",
+    code: "000000",
+  }, 401],
   ["order-api", { action: "bootstrap", customer_code: "bad" }, 400],
+  ["order-api", { action: "bootstrap", cafe_code: "WHR73PVD" }, 200],
 ];
 
 let failed = false;
@@ -34,8 +42,10 @@ for (const [name, body, expected] of tests) {
   });
   const result = await response.json().catch(() => ({}));
   const safeError = typeof result.error === "string" && !("detail" in result);
-  const passed = response.status === expected && safeError;
-  console.log(`${passed ? "PASS" : "FAIL"} ${name}: ${response.status} ${result.error ?? "NO_ERROR"}`);
+  const validBody = expected >= 400 ? safeError :
+    result.authenticated === false && result.cafe?.order_public_code === body.cafe_code;
+  const passed = response.status === expected && validBody;
+  console.log(`${passed ? "PASS" : "FAIL"} ${name}: ${response.status} ${result.error ?? result.cafe?.name ?? "NO_ERROR"}`);
   if (!passed) failed = true;
 }
 

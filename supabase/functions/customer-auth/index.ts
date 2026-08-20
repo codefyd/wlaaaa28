@@ -18,6 +18,12 @@ function maskedPhone(phone: string) {
   return `${phone.slice(0, 3)}•••••${phone.slice(-4)}`;
 }
 
+const PUBLIC_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function createPublicCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (byte) => PUBLIC_CODE_ALPHABET[byte & 31]).join("");
+}
+
 async function sendWhatsAppOtp(phone: string, code: string) {
   const token = Deno.env.get("META_WHATSAPP_TOKEN")?.trim();
   const phoneNumberId = Deno.env.get("META_PHONE_NUMBER_ID")?.trim();
@@ -69,14 +75,55 @@ Deno.serve(async (req) => {
 
     if (action === "request") {
       const customerCode = normalizeCustomerCode(payload.customer_code);
-      if (!customerCode) return json(req, { error: "INVALID_CUSTOMER_CODE" }, 400);
+      const cafeCode = normalizeCustomerCode(payload.cafe_code);
+      let customer: Record<string, any> | null = null;
+      let cafe: Record<string, any> | null = null;
+      let phone: string | null = null;
 
-      const { data: customer, error: customerError } = await admin.from("customers")
-        .select("id,phone,cafe_id,cafes!inner(is_active,customer_login_required)")
-        .eq("public_code", customerCode).maybeSingle();
-      if (customerError) throw customerError;
-      const cafe = Array.isArray(customer?.cafes) ? customer?.cafes[0] : customer?.cafes;
-      const phone = normalizePhone(customer?.phone);
+      if (cafeCode) {
+        phone = normalizePhone(payload.phone);
+        if (!phone) return json(req, { error: "INVALID_PHONE" }, 400);
+        const { data: publicCafe, error: cafeError } = await admin.from("cafes")
+          .select("id,is_active,customer_login_required,car_ordering_enabled")
+          .eq("order_public_code", cafeCode).maybeSingle();
+        if (cafeError) throw cafeError;
+        cafe = publicCafe;
+        if (!cafe?.is_active || !cafe?.car_ordering_enabled) {
+          return json(req, { error: "CAFE_NOT_FOUND" }, 404);
+        }
+
+        const lookup = await admin.from("customers").select("id,phone,cafe_id,public_code")
+          .eq("cafe_id", cafe.id).eq("phone", phone).maybeSingle();
+        if (lookup.error) throw lookup.error;
+        customer = lookup.data;
+        for (let attempt = 0; !customer && attempt < 5; attempt++) {
+          const created = await admin.from("customers").insert({
+            cafe_id: cafe.id,
+            phone,
+            public_code: createPublicCode(),
+            verified_at: null,
+          }).select("id,phone,cafe_id,public_code").single();
+          if (!created.error) {
+            customer = created.data;
+            break;
+          }
+          if (created.error.code !== "23505") throw created.error;
+          const retry = await admin.from("customers").select("id,phone,cafe_id,public_code")
+            .eq("cafe_id", cafe.id).eq("phone", phone).maybeSingle();
+          if (retry.error) throw retry.error;
+          customer = retry.data;
+        }
+        if (!customer) throw new Error("CUSTOMER_CREATE_FAILED");
+      } else {
+        if (!customerCode) return json(req, { error: "INVALID_CUSTOMER_CODE" }, 400);
+        const lookup = await admin.from("customers")
+          .select("id,phone,cafe_id,public_code,cafes!inner(is_active,customer_login_required)")
+          .eq("public_code", customerCode).maybeSingle();
+        if (lookup.error) throw lookup.error;
+        customer = lookup.data;
+        cafe = Array.isArray(customer?.cafes) ? customer?.cafes[0] : customer?.cafes;
+        phone = normalizePhone(customer?.phone);
+      }
       if (!customer || !phone || !cafe?.is_active) {
         return json(req, { error: "CUSTOMER_NOT_FOUND" }, 404);
       }
@@ -124,18 +171,25 @@ Deno.serve(async (req) => {
 
     if (action === "verify") {
       const customerCode = normalizeCustomerCode(payload.customer_code);
+      const cafeCode = normalizeCustomerCode(payload.cafe_code);
       const challengeId = String(payload.challenge_id ?? "");
       const code = String(payload.code ?? "").trim();
-      if (!customerCode || !/^[0-9a-f-]{36}$/i.test(challengeId) || !/^\d{6}$/.test(code)) {
+      if ((!customerCode && !cafeCode) || !/^[0-9a-f-]{36}$/i.test(challengeId) || !/^\d{6}$/.test(code)) {
         return json(req, { error: "INVALID_PARAMS" }, 400);
       }
       const { data: challenge, error: challengeError } = await admin
         .from("customer_login_challenges")
-        .select("customer_id,customers!inner(public_code)").eq("id", challengeId).maybeSingle();
+        .select("customer_id,customers!inner(public_code,cafe_id,cafes!inner(order_public_code))")
+        .eq("id", challengeId).maybeSingle();
       if (challengeError) throw challengeError;
       const linkedCustomer = Array.isArray(challenge?.customers)
         ? challenge?.customers[0] : challenge?.customers;
-      if (!challenge || linkedCustomer?.public_code !== customerCode) {
+      const linkedCafe = Array.isArray(linkedCustomer?.cafes)
+        ? linkedCustomer?.cafes[0] : linkedCustomer?.cafes;
+      const challengeMatches = customerCode
+        ? linkedCustomer?.public_code === customerCode
+        : linkedCafe?.order_public_code === cafeCode;
+      if (!challenge || !challengeMatches) {
         return json(req, { error: "INVALID_CHALLENGE" }, 401);
       }
 
@@ -155,7 +209,11 @@ Deno.serve(async (req) => {
         const status = data.error === "OTP_LOCKED" ? 429 : 400;
         return json(req, data, status);
       }
-      return json(req, { customer_session: sessionToken, expires_at: expiresAt });
+      return json(req, {
+        customer_session: sessionToken,
+        customer_code: linkedCustomer.public_code,
+        expires_at: expiresAt,
+      });
     }
 
     if (action === "logout") {
