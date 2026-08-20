@@ -3,7 +3,7 @@ import path from "node:path";
 import vm from "node:vm";
 
 const root = path.resolve(import.meta.dirname, "..");
-const htmlFiles = ["index.html", "cashier.html", "dashboard.html"];
+const htmlFiles = ["index.html", "order.html", "cashier.html", "dashboard.html"];
 const missing = [];
 
 JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));

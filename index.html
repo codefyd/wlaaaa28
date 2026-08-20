@@ -451,6 +451,7 @@
   .verify-code{width:100%;margin:18px 0 4px;padding:14px;border-radius:14px;
     border:1px solid var(--line-hi);background:var(--field);color:var(--ink);
     font:700 24px var(--font);text-align:center;letter-spacing:.35em;direction:ltr}
+  .order-entry{display:flex;align-items:center;justify-content:center;text-decoration:none;margin:0 0 18px}
 
   @media (prefers-reduced-motion:reduce){
     .member-card::after,.btn::after,.track span::after,.mc-seal svg,
@@ -486,6 +487,15 @@
       <button class="btn" id="verifyBtn">تأكيد الرقم</button>
       <p id="verifyMessage" class="muted" aria-live="polite"></p>
     </section>
+    <section id="customerLoginView" class="card verify-card" style="display:none">
+      <p class="eyebrow">دخول آمن</p>
+      <h1>افتح بطاقتك برمز واتساب</h1>
+      <p class="muted">سنرسل رمزًا من 6 أرقام إلى رقمك المسجل.</p>
+      <div id="customerLoginBody">
+        <button class="btn" id="sendCustomerOtp">إرسال رمز واتساب</button>
+      </div>
+      <p id="customerLoginMessage" class="muted" aria-live="polite"></p>
+    </section>
     <div id="content" style="display:none"></div>
   </main>
 
@@ -518,6 +528,9 @@ const legacyToken = hashParam("t");
 const customerAccess = customerCode
   ? { customer_code: customerCode }
   : legacyToken ? { magic_token: legacyToken } : null;
+const customerSessionKey=`customer-session:${customerCode||"legacy"}`;
+let customerSession=localStorage.getItem(customerSessionKey)||"";
+const customerRequest=()=>({...customerAccess,customer_session:customerSession});
 const $ = (s)=>document.querySelector(s);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let state=null, wheelLabelsArr=[], currentRotation=0, spinning=false;
@@ -659,7 +672,7 @@ if(!customerAccess){
 
 async function load(){
   try{
-    state = await callFn("customer-me", customerAccess);
+    state = await callFn("customer-me", customerRequest());
     const cafe=state.cafe||{};
     applyBrandTheme(cafe);
     paintBoot(cafe.name, cafe.logo_url);
@@ -669,7 +682,8 @@ async function load(){
       color_background:cafe.color_background, color_button:cafe.color_button,
       background_url:cafe.background_url,customer_theme:cafe.customer_theme
     })); }catch(e){}
-    if(state.requires_verification) showVerification();
+    if(state.requires_login) showCustomerLogin();
+    else if(state.requires_verification) showVerification();
     else render();
     /* لحظة الهوية: لا نخفي الشعار قبل اكتمالها */
     const wait=Math.max(0, 1200-(performance.now()-bootT0));
@@ -688,6 +702,47 @@ function showVerification(){
   $("#verifyView").style.display="block";
 }
 
+function showCustomerLogin(){
+  $("#content").style.display="none";
+  $("#verifyView").style.display="none";
+  $("#customerLoginView").style.display="block";
+}
+
+function customerLoginError(code){
+  return ({WHATSAPP_NOT_CONFIGURED:"خدمة واتساب تحتاج إكمال الإعداد من التاجر.",
+    WHATSAPP_SEND_FAILED:"تعذر إرسال الرسالة الآن — حاول بعد قليل.",
+    WAIT_BEFORE_RESEND:"انتظر دقيقة قبل إعادة الإرسال.",TOO_MANY_REQUESTS:"محاولات كثيرة — حاول لاحقًا.",
+    OTP_INVALID:"الرمز غير صحيح.",OTP_EXPIRED:"انتهت صلاحية الرمز — اطلب رمزًا جديدًا.",
+    OTP_LOCKED:"محاولات كثيرة — اطلب رمزًا جديدًا لاحقًا."})[code]||"تعذر إكمال العملية.";
+}
+
+$("#sendCustomerOtp").onclick=async()=>{
+  const button=$("#sendCustomerOtp"),message=$("#customerLoginMessage");
+  button.disabled=true;message.textContent="جارٍ إرسال الرمز…";
+  try{
+    const result=await callFn("customer-auth",{action:"request",customer_code:customerCode});
+    $("#customerLoginBody").innerHTML=`
+      <p class="muted">أرسلناه إلى ${escapeHTML(result.masked_phone)}</p>
+      <input id="customerOtp" class="verify-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" aria-label="رمز واتساب">
+      <button class="btn" id="verifyCustomerOtp">دخول</button>`;
+    message.textContent="الرمز صالح لمدة 5 دقائق.";
+    $("#verifyCustomerOtp").onclick=()=>verifyCustomerOtp(result.challenge_id);
+    $("#customerOtp").focus();
+  }catch(e){message.textContent=customerLoginError(e.message);button.disabled=false;}
+};
+
+async function verifyCustomerOtp(challengeId){
+  const code=$("#customerOtp").value.replace(/\D/g,""),message=$("#customerLoginMessage"),button=$("#verifyCustomerOtp");
+  if(code.length!==6){message.textContent="أدخل الرمز المكوّن من 6 أرقام.";return;}
+  button.disabled=true;message.textContent="جارٍ التحقق…";
+  try{
+    const result=await callFn("customer-auth",{action:"verify",customer_code:customerCode,challenge_id:challengeId,code});
+    customerSession=result.customer_session;localStorage.setItem(customerSessionKey,customerSession);
+    state=await callFn("customer-me",customerRequest());
+    $("#customerLoginView").style.display="none";render();toast("تم تسجيل الدخول");
+  }catch(e){message.textContent=customerLoginError(e.message);button.disabled=false;}
+}
+
 $("#verifyBtn").onclick=async()=>{
   const code=$("#verifyCode").value.replace(/\D/g,"");
   const message=$("#verifyMessage");
@@ -695,7 +750,7 @@ $("#verifyBtn").onclick=async()=>{
   $("#verifyBtn").disabled=true; message.textContent="جارٍ التحقق…";
   try{
     await callFn("verify-code",{...customerAccess,code});
-    state=await callFn("customer-me",customerAccess);
+    state=await callFn("customer-me",customerRequest());
     if(state.requires_verification) throw new Error("VERIFY_FAILED");
     $("#verifyView").style.display="none";
     message.textContent="";
@@ -778,6 +833,8 @@ function render(){
         </div>
       </div>
     </section>
+
+    ${cafe.car_ordering_enabled&&customerCode?`<a class="btn order-entry reveal" href="./order.html#${customerCode}">🚗 اطلب واستلم من سيارتك</a>`:""}
 
     <section class="card customer-section reveal" data-customer-section="balance">
       <p class="eyebrow">رصيد الأكواب</p>
@@ -1026,7 +1083,7 @@ function startSpin(v0DegPerSec){
   }
 
   let res=null, err=null;
-  callFn("spin",{ ...customerAccess, visit_id:state.pending_spin_visit_id })
+  callFn("spin",{ ...customerRequest(), visit_id:state.pending_spin_visit_id })
     .then(r=>{res=r;}).catch(e=>{err=e;})
     .finally(()=>{ resolved=true; if(reduced) land(); });
 
@@ -1110,7 +1167,7 @@ $("#prizeClose").onclick=async()=>{
   $("#prizeOverlay").classList.remove("show");
   spinning=false;
   try{
-    state=await callFn("customer-me",customerAccess);
+    state=await callFn("customer-me",customerRequest());
     render();
   }catch(e){}
 };
