@@ -42,18 +42,40 @@ async function orderDetails(admin: ReturnType<typeof adminClient>, customerId: s
 
 async function customerContext(
   admin: ReturnType<typeof adminClient>,
-  customerCode: string,
+  customerCode: string | null,
+  cafeCode: string | null,
   sessionToken: unknown,
   requireSession: boolean,
 ) {
-  const { data: customer, error } = await admin.from("customers")
-    .select("id,cafe_id,full_name,public_code").eq("public_code", customerCode).maybeSingle();
-  if (error) throw error;
-  if (!customer) return { error: "CUSTOMER_NOT_FOUND" } as const;
   const session = await resolveCustomerSession(admin, sessionToken);
-  const authenticated = session?.customerId === customer.id;
+  let customer: Record<string, any> | null = null;
+  let cafeId: string | null = null;
+
+  if (cafeCode) {
+    const cafeLookup = await admin.from("cafes").select("id")
+      .eq("order_public_code", cafeCode).maybeSingle();
+    if (cafeLookup.error) throw cafeLookup.error;
+    if (!cafeLookup.data) return { error: "CAFE_NOT_FOUND" } as const;
+    cafeId = cafeLookup.data.id;
+    if (session) {
+      const lookup = await admin.from("customers").select("id,cafe_id,full_name,public_code")
+        .eq("id", session.customerId).eq("cafe_id", cafeId).maybeSingle();
+      if (lookup.error) throw lookup.error;
+      customer = lookup.data;
+    }
+  } else if (customerCode) {
+    const lookup = await admin.from("customers").select("id,cafe_id,full_name,public_code")
+      .eq("public_code", customerCode).maybeSingle();
+    if (lookup.error) throw lookup.error;
+    if (!lookup.data) return { error: "CUSTOMER_NOT_FOUND" } as const;
+    customer = lookup.data;
+    cafeId = customer.cafe_id;
+  }
+
+  if (!cafeId) return { error: "INVALID_PUBLIC_CODE" } as const;
+  const authenticated = !!customer && session?.customerId === customer.id;
   if (requireSession && !authenticated) return { error: "LOGIN_REQUIRED" } as const;
-  return { customer, authenticated } as const;
+  return { customer, cafeId, authenticated } as const;
 }
 
 Deno.serve(async (req) => {
@@ -63,54 +85,55 @@ Deno.serve(async (req) => {
     const payload = await req.json();
     const action = String(payload.action ?? "bootstrap");
     const customerCode = normalizeCustomerCode(payload.customer_code);
-    if (!customerCode) return json(req, { error: "INVALID_CUSTOMER_CODE" }, 400);
+    const cafeCode = normalizeCustomerCode(payload.cafe_code);
+    if (!customerCode && !cafeCode) return json(req, { error: "INVALID_PUBLIC_CODE" }, 400);
     const admin = adminClient();
     const context = await customerContext(
-      admin, customerCode, payload.customer_session, action !== "bootstrap",
+      admin, customerCode, cafeCode, payload.customer_session, action !== "bootstrap",
     );
     if ("error" in context) {
       return json(req, { error: context.error }, context.error === "LOGIN_REQUIRED" ? 401 : 404);
     }
 
     if (action === "bootstrap") {
-      const [{ data: cafe, error: cafeError }, categoriesResult, productsResult, optionsResult] =
-        await Promise.all([
-          admin.from("cafes").select(
-            "id,name,logo_url,color_primary,color_secondary,color_background,color_button,theme,background_url,customer_theme,car_ordering_enabled,customer_login_required,order_min_total,is_active",
-          ).eq("id", context.customer.cafe_id).maybeSingle(),
-          admin.from("product_categories").select("id,name,sort_order")
-            .eq("cafe_id", context.customer.cafe_id).eq("is_active", true).order("sort_order"),
-          admin.from("products").select(
-            "id,category_id,name,description,image_url,base_price,preparation_minutes,sort_order",
-          ).eq("cafe_id", context.customer.cafe_id).eq("is_active", true)
-            .eq("is_available", true).order("sort_order"),
-          admin.from("product_options").select(
-            "id,product_id,group_name,name,price_delta,is_multiple,sort_order",
-          ).eq("cafe_id", context.customer.cafe_id).eq("is_active", true).order("sort_order"),
-        ]);
-      if (cafeError || categoriesResult.error || productsResult.error || optionsResult.error) {
-        throw new Error("BOOTSTRAP_FAILED");
-      }
+      const { data: cafe, error: cafeError } = await admin.from("cafes").select(
+        "id,name,logo_url,color_primary,color_secondary,color_background,color_button,theme,background_url,customer_theme,car_ordering_enabled,customer_login_required,order_min_total,is_active,order_public_code",
+      ).eq("id", context.cafeId).maybeSingle();
+      if (cafeError) throw new Error("BOOTSTRAP_FAILED");
       if (!cafe?.is_active) return json(req, { error: "CAFE_INACTIVE" }, 403);
       const { is_active: _active, ...publicCafe } = cafe;
       const response: Record<string, unknown> = {
         cafe: publicCafe,
-        categories: categoriesResult.data ?? [],
-        products: productsResult.data ?? [],
-        options: optionsResult.data ?? [],
+        categories: [],
+        products: [],
+        options: [],
         authenticated: context.authenticated,
         requires_login: !context.authenticated,
       };
       if (context.authenticated) {
-        const [activeOrder, rewardsResult] = await Promise.all([
-          orderDetails(admin, context.customer.id),
+        const [categoriesResult, productsResult, optionsResult, activeOrder, rewardsResult] = await Promise.all([
+          admin.from("product_categories").select("id,name,sort_order")
+            .eq("cafe_id", context.cafeId).eq("is_active", true).order("sort_order"),
+          admin.from("products").select(
+            "id,category_id,name,description,image_url,base_price,preparation_minutes,sort_order",
+          ).eq("cafe_id", context.cafeId).eq("is_active", true)
+            .eq("is_available", true).order("sort_order"),
+          admin.from("product_options").select(
+            "id,product_id,group_name,name,price_delta,is_multiple,sort_order",
+          ).eq("cafe_id", context.cafeId).eq("is_active", true).order("sort_order"),
+          orderDetails(admin, context.customer!.id),
           admin.from("rewards").select("id,label,reward_type,reward_value,expires_at,created_at")
-            .eq("customer_id", context.customer.id).eq("status", "available")
+            .eq("customer_id", context.customer!.id).eq("status", "available")
             .eq("reward_type", "free_cup")
             .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
             .order("created_at", { ascending: false }),
         ]);
-        if (rewardsResult.error) throw rewardsResult.error;
+        if (categoriesResult.error || productsResult.error || optionsResult.error || rewardsResult.error) {
+          throw new Error("BOOTSTRAP_FAILED");
+        }
+        response.categories = categoriesResult.data ?? [];
+        response.products = productsResult.data ?? [];
+        response.options = optionsResult.data ?? [];
         const rewards = rewardsResult.data ?? [];
         let reserved = new Set<string>();
         if (rewards.length) {
@@ -120,7 +143,11 @@ Deno.serve(async (req) => {
           if (error) throw error;
           reserved = new Set((data ?? []).map((row) => row.reward_id));
         }
-        response.customer = { id: context.customer.id, full_name: context.customer.full_name };
+        response.customer = {
+          id: context.customer!.id,
+          full_name: context.customer!.full_name,
+          public_code: context.customer!.public_code,
+        };
         response.rewards = rewards.filter((reward) => !reserved.has(reward.id));
         response.active_order = activeOrder;
       }
@@ -128,6 +155,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "create") {
+      if (!context.customer) return json(req, { error: "LOGIN_REQUIRED" }, 401);
       const vehiclePlate = normalizeVehiclePlate(payload.vehicle_plate);
       if (!vehiclePlate) return json(req, { error: "INVALID_PLATE" }, 400);
       const { data, error } = await admin.rpc("create_car_order", {
@@ -145,12 +173,14 @@ Deno.serve(async (req) => {
     }
 
     if (action === "state") {
+      if (!context.customer) return json(req, { error: "LOGIN_REQUIRED" }, 401);
       if (!isUuid(payload.order_id)) return json(req, { error: "INVALID_ORDER" }, 400);
       const order = await orderDetails(admin, context.customer.id, payload.order_id);
       return order ? json(req, { order }) : json(req, { error: "ORDER_NOT_FOUND" }, 404);
     }
 
     if (action === "arrive") {
+      if (!context.customer) return json(req, { error: "LOGIN_REQUIRED" }, 401);
       if (!isUuid(payload.order_id)) return json(req, { error: "INVALID_ORDER" }, 400);
       const { error } = await admin.rpc("customer_mark_order_arrived", {
         p_customer: context.customer.id,
@@ -162,6 +192,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "cancel") {
+      if (!context.customer) return json(req, { error: "LOGIN_REQUIRED" }, 401);
       if (!isUuid(payload.order_id)) return json(req, { error: "INVALID_ORDER" }, 400);
       const { error } = await admin.rpc("customer_cancel_car_order", {
         p_customer: context.customer.id,
