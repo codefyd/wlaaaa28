@@ -8,6 +8,12 @@ import {
 } from "../_shared/http.ts";
 
 const ACTIVE_STATUSES = ["pending", "accepted", "preparing", "ready"];
+const PLATE_PATTERN = /^([A-Z\u0621-\u064A]{3})\s+([0-9]{2,4})$/;
+
+function normalizeVehiclePlate(value: unknown) {
+  const normalized = String(value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+  return PLATE_PATTERN.test(normalized) ? normalized : null;
+}
 
 function rpcError(message: string) {
   const known = [
@@ -122,9 +128,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === "create") {
+      const vehiclePlate = normalizeVehiclePlate(payload.vehicle_plate);
+      if (!vehiclePlate) return json(req, { error: "INVALID_PLATE" }, 400);
       const { data, error } = await admin.rpc("create_car_order", {
         p_customer: context.customer.id,
-        p_vehicle_plate: String(payload.vehicle_plate ?? ""),
+        p_vehicle_plate: vehiclePlate,
         p_vehicle_color: String(payload.vehicle_color ?? ""),
         p_vehicle_model: String(payload.vehicle_model ?? ""),
         p_note: String(payload.note ?? ""),

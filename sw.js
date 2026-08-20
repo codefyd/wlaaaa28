@@ -1,6 +1,6 @@
 // sw.js — service worker بسيط: يخزّن قشرة التطبيق فقط.
 // لا نخزّن استجابات الـ API (بيانات الولاء يجب أن تكون حيّة).
-const CACHE = "loyalty-shell-v9";
+const CACHE = "loyalty-shell-v10";
 const SHELL = ["./index.html", "./order.html", "./cashier.html", "./dashboard.html", "./reset-password.html", "./app.js", "./config.js", "./manifest.webmanifest", "./icon.svg", "./foda.ttf"];
 
 self.addEventListener("install", (e) => {
